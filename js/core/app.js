@@ -76,8 +76,6 @@ document.addEventListener("keydown", (e) => {
 
 // stubs (serao implementados nas proximas fases) - evitam erro ao clicar
 function pdvFecharVenda() { if (typeof telaPagamento === "function") telaPagamento(); else pdvToast("Pagamento: proxima fase", "info"); }
-function pdvSelecionarCliente() { pdvToast("Consulta de cliente: proxima fase", "info"); }
-function pdvDadosClienteManual() { pdvToast("Dados do cliente: proxima fase", "info"); }
 function pdvCancelarItem() { if (typeof vendaCancelarItem === "function") vendaCancelarItem(); }
 function pdvCancelarCupom() { pdvToast("Cancelar cupom: use Cupons Fiscais (F10)", "info"); }
 function abrirMenuGerente() { pdvToast("Menu Gerente: próxima fase", "info"); }
