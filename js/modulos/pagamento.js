@@ -114,24 +114,27 @@ function telaPreTransmissao(opts) {
 
 // apos emitir: mostra resultado com opcoes de imprimir / nova venda
 function mostrarResultadoVenda(r) {
-  const box = abrirModal(`
-    <div style="padding:24px;text-align:center">
-      <div style="font-size:2.4rem;margin-bottom:6px">✅</div>
-      <h2 style="color:#16a34a;margin-bottom:4px">NFC-e Autorizada</h2>
-      <p style="color:#555;font-size:0.84rem;margin-bottom:4px">Nº ${r.numero} · Protocolo ${r.protocolo}</p>
-      <p style="color:#888;font-size:0.74rem;word-break:break-all;margin-bottom:18px">${r.chave}</p>
-      ${r.qrcode ? `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(r.qrcode)}" style="background:#fff;padding:6px;border-radius:8px;margin-bottom:16px"/>` : ""}
+  // guarda o xml ANTES de montar o modal (botao usa o global, sem embutir XML no HTML)
+  window.__ultimoCupom = { xml: r.xml, chave: r.chave };
+  const qr = r.qrcode
+    ? `<img src="https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${encodeURIComponent(r.qrcode)}" style="background:#fff;padding:6px;border-radius:8px;margin:0 auto 14px;display:block"/>`
+    : "";
+  abrirModal(`
+    <div style="padding:20px 22px;text-align:center">
+      <div style="font-size:2rem;margin-bottom:2px">✅</div>
+      <h2 style="color:#16a34a;margin-bottom:2px;font-size:1.2rem">NFC-e Autorizada</h2>
+      <p style="color:#555;font-size:0.8rem;margin-bottom:2px">Nº ${r.numero} · Protocolo ${r.protocolo}</p>
+      <p style="color:#aaa;font-size:0.66rem;word-break:break-all;margin-bottom:12px">${r.chave}</p>
+      ${qr}
       <div style="display:flex;gap:10px">
-        <button onclick="pdvImprimirCupom('${(r.xml || '').replace(/'/g, "\\'")}','${r.chave}')" style="flex:1;padding:11px;border-radius:6px;border:none;background:#2563eb;color:#fff;font-weight:600;cursor:pointer">🖨️ Imprimir cupom</button>
+        <button onclick="pdvImprimirCupom()" style="flex:1;padding:11px;border-radius:6px;border:none;background:#2563eb;color:#fff;font-weight:600;cursor:pointer">🖨️ Imprimir</button>
         <button onclick="fecharModal();irPara('venda')" style="flex:1;padding:11px;border-radius:6px;border:none;background:#f97316;color:#fff;font-weight:600;cursor:pointer">Nova venda →</button>
       </div>
-    </div>`, { maxWidth: "380px", fecharAoClicarFora: false });
-  // guarda o xml pra impressao (evita escapar no onclick)
-  window.__ultimoCupom = { xml: r.xml, chave: r.chave };
+    </div>`, { maxWidth: "340px", fecharAoClicarFora: false });
 }
 
 // imprime o cupom (DANFCE) via servidor SEFAZ
-async function pdvImprimirCupom(_xmlIgnore, chave) {
+async function pdvImprimirCupom() {
   const dados = window.__ultimoCupom || {};
   const xml = dados.xml;
   if (!xml) { pdvToast("XML do cupom não disponível.", "erro"); return; }
