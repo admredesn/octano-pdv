@@ -83,23 +83,17 @@ async function cpCancelar(i) {
   const msg = document.getElementById("cp-msg");
   const set = (t, c) => { if (msg) { msg.style.color = c; msg.textContent = t; } };
   if (!n) return;
-  const emp = PDV.empresa;
-  if (!emp.cert_path) { set("Certificado não configurado.", "#f87171"); return; }
-  const senha = getCertSenha();
-  if (!senha) { set("Senha do certificado não encontrada.", "#f87171"); return; }
   const just = prompt("Justificativa do cancelamento (mínimo 15 caracteres):", "");
   if (just === null) return;
   if (just.trim().length < 15) { set("Justificativa deve ter ao menos 15 caracteres.", "#f87171"); return; }
   set("📡 Cancelando...", "#888");
   try {
-    const { data: cb } = await sb.storage.from("octano-certs").download(emp.cert_path);
-    const b64 = btoa(String.fromCharCode(...new Uint8Array(await cb.arrayBuffer())));
-    const resp = await fetch(`${SEFAZ_URL}/cancelar-nfce`, {
+    const resp = await fetch(`${SEFAZ_URL}/cancelar-nfce-empresa`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        chave: n.chave_nfe, protocolo: n.protocolo, justificativa: just.trim(),
-        cnpj: (emp.cnpj || "").replace(/\D/g, ""),
-        cert_base64: b64, cert_senha: senha, ambiente: n.ambiente || "homologacao",
+        empresa_id: PDV.empresaId,
+        chave: n.chave_nfe, protocolo: n.protocolo,
+        justificativa: just.trim(), ambiente: n.ambiente || "homologacao",
       }),
     });
     const r = await resp.json();
