@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Octano PDV</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+    body { background: #0b0d14; color: #e5e7eb; }
+    input:focus, button:focus { outline: 2px solid #f97316; outline-offset: 1px; }
+    ::-webkit-scrollbar { width: 9px; height: 9px; }
+    ::-webkit-scrollbar-thumb { background: #2a2d3e; border-radius: 5px; }
+  </style>
+</head>
+<body>
+  <div id="pdv-app">
+    <div id="pdv-root"></div>
+  </div>
+
+  <!-- Supabase JS -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- Core -->
+  <script src="js/core/config.js?v=1"></script>
+  <script src="js/core/state.js?v=1"></script>
+  <script src="js/core/router.js?v=1"></script>
+  <script src="js/core/auth.js?v=1"></script>
+
+  <!-- Modulos -->
+  <script src="js/modulos/turno.js?v=1"></script>
+  <script src="js/modulos/venda.js?v=1"></script>
+  <script src="js/modulos/cupons.js?v=1"></script>
+
+  <!-- App (init por ultimo) -->
+  <script src="js/core/app.js?v=1"></script>
+</body>
+</html>
