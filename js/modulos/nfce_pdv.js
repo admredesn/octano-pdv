@@ -54,27 +54,23 @@ function pdvMontarNotaNfce(numero, cpf, tpag) {
   return { nota, empresa };
 }
 
-// emite a NFC-e: chama o servidor SEFAZ, grava venda + nfce. Retorna o resultado.
+// emite a NFC-e pela ROTA SEGURA (servidor usa cert/senha guardados por empresa).
+// O cliente NUNCA envia senha nem certificado - so empresa_id + venda.
 async function pdvEmitirNfce(opts) {
   // opts: { cpf, tpag, ambiente, pagamentos }
   const emp = PDV.empresa;
   if (!emp.cert_path) return { ok: false, erro: "Certificado não configurado (tela Empresa no retaguarda)." };
   if (!emp.csc || !emp.csc_id) return { ok: false, erro: "CSC não configurado na empresa." };
-  const senha = getCertSenha();
-  if (!senha) return { ok: false, erro: "Senha do certificado não encontrada. Configure no retaguarda." };
-
-  const { data: cb, error: errCb } = await sb.storage.from("octano-certs").download(emp.cert_path);
-  if (errCb) return { ok: false, erro: "Falha ao baixar certificado: " + errCb.message };
-  const b64 = btoa(String.fromCharCode(...new Uint8Array(await cb.arrayBuffer())));
 
   const numero = await pdvProximoNumeroNfce();
   const { nota, empresa } = pdvMontarNotaNfce(numero, opts.cpf, opts.tpag);
 
-  const resp = await fetch(`${SEFAZ_URL}/emitir-nfce`, {
+  const resp = await fetch(`${SEFAZ_URL}/emitir-nfce-empresa`, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      cert_base64: b64, cert_senha: senha, ambiente: opts.ambiente,
-      csc: emp.csc, csc_id: emp.csc_id, nota, empresa,
+      empresa_id: PDV.empresaId,
+      ambiente: opts.ambiente,
+      nota, empresa,
     }),
   });
   const r = await resp.json();
