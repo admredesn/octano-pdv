@@ -76,10 +76,12 @@ async function abastecimentoSalvar(box) {
   msg.style.color = "#888"; msg.textContent = "Registrando...";
 
   const valor = litros * preco;
+  // a coluna 'bico' e integer -> extrai so o numero do texto
+  const bicoNum = bico ? (parseInt(bico.replace(/\D/g, ""), 10) || null) : null;
   // grava o abastecimento
   const { error: e1 } = await sb.from("oct_pdv_abastecimentos").insert({
     empresa_id: PDV.empresaId, turno_id: PDV.turno.id, tipo: "abastecimento",
-    tanque_id: tanqueId, combustivel: tanque.combustivel, bico: bico || null,
+    tanque_id: tanqueId, combustivel: tanque.combustivel, bico: bicoNum,
     litros, preco_litro: preco, valor, vendedor: vendedor || null, status: "concluido",
   });
   if (e1) { msg.style.color = "#dc2626"; msg.textContent = "Erro: " + e1.message; return; }
@@ -137,9 +139,10 @@ async function afericaoSalvar(box) {
   msg.style.color = "#888"; msg.textContent = "Registrando...";
 
   // grava a afericao (tipo afericao, sem valor de venda)
+  const bicoNum = bico ? (parseInt(bico.replace(/\D/g, ""), 10) || null) : null;
   const { error: e1 } = await sb.from("oct_pdv_abastecimentos").insert({
     empresa_id: PDV.empresaId, turno_id: PDV.turno.id, tipo: "afericao",
-    tanque_id: tanqueId, combustivel: tanque.combustivel, bico: bico || null,
+    tanque_id: tanqueId, combustivel: tanque.combustivel, bico: bicoNum,
     litros, preco_litro: 0, valor: 0, vendedor: vendedor || null, status: "concluido",
     observacao: "Aferição - combustível retornado ao tanque",
   });
