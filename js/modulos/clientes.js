@@ -89,8 +89,10 @@ async function clienteSalvar(box) {
   const msg = box.querySelector("#nc-msg");
   if (!nome) { msg.style.color = "#dc2626"; msg.textContent = "Informe o nome."; return; }
   msg.style.color = "#888"; msg.textContent = "Salvando...";
+  // oct_clientes exige email unico e nao-nulo. Sem email, gera um placeholder unico.
+  const emailFinal = email || `sem-email-${doc || Date.now()}@octano.local`;
   const { data, error } = await sb.from("oct_clientes").insert({
-    nome, documento: doc || "", telefone: tel || "", email: email || "", ativo: true,
+    nome, documento: doc || "", telefone: tel || "", email: emailFinal, ativo: true,
   }).select("id,nome,documento,telefone,email").single();
   if (error) { msg.style.color = "#dc2626"; msg.textContent = "Erro: " + error.message; return; }
   clienteSelecionar(data);
