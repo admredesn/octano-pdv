@@ -90,7 +90,7 @@ async function clienteSalvar(box) {
   if (!nome) { msg.style.color = "#dc2626"; msg.textContent = "Informe o nome."; return; }
   msg.style.color = "#888"; msg.textContent = "Salvando...";
   const { data, error } = await sb.from("oct_clientes").insert({
-    nome, documento: doc || null, telefone: tel || null, email: email || null, ativo: true,
+    nome, documento: doc || "", telefone: tel || "", email: email || "", ativo: true,
   }).select("id,nome,documento,telefone,email").single();
   if (error) { msg.style.color = "#dc2626"; msg.textContent = "Erro: " + error.message; return; }
   clienteSelecionar(data);
