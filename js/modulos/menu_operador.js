@@ -12,6 +12,8 @@ function abrirMenuOperador() {
     { rotulo: "Despesa", icone: "📤", fn: "caixaAbrir('despesa')" },
     { rotulo: "Receita", icone: "📥", fn: "caixaAbrir('receita')" },
     { rotulo: "Leitura X", icone: "📊", fn: "leituraX()" },
+    { rotulo: "Fidelidade", icone: "★", fn: "fidelidadeConsultar()" },
+    { rotulo: "Consultar Produtos", icone: "🔍", fn: "produtosConsultar()" },
     { rotulo: "Registrar Ponto", icone: "🕐", fn: "pontoAbrir()" },
     { rotulo: "Cupons Fiscais", icone: "🧾", fn: "fecharModal();irPara('cupons')" },
   ];
