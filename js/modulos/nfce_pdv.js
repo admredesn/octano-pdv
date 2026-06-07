@@ -93,8 +93,10 @@ async function pdvEmitirNfce(opts) {
   } catch (e) { console.error("Erro ao gravar NFC-e:", e); }
 
   // grava a venda do PDV vinculada ao turno
+  let vendaId = null;
+  let pontosGanhos = 0;
   try {
-    await sb.from("oct_pdv_vendas").insert({
+    const { data: vGrav } = await sb.from("oct_pdv_vendas").insert({
       empresa_id: PDV.empresaId, turno_id: PDV.turno?.id || null, numero,
       operador: PDV.operador?.nome || PDV.turno?.operador || null,
       cliente_nome: PDV.venda.clienteManual?.nome || PDV.venda.cliente?.nome || null,
@@ -102,9 +104,17 @@ async function pdvEmitirNfce(opts) {
       itens: PDV.venda.itens, pagamentos: opts.pagamentos || [],
       valor_total: PDV.totalVenda(), status: "concluida",
       nfce_id: nfceId, nfce_chave: r.chave, nfce_protocolo: r.protocolo, nfce_status: "autorizada",
-    });
+    }).select("id").single();
+    vendaId = vGrav?.id || null;
   } catch (e) { console.error("Erro ao gravar venda:", e); }
 
+  // fidelidade: credita pontos se a venda tem cliente CADASTRADO (com id)
+  try {
+    if (PDV.venda.cliente?.id && typeof fidelidadeCreditar === "function") {
+      pontosGanhos = (await fidelidadeCreditar(PDV.venda.cliente.id, PDV.totalVenda(), vendaId)) || 0;
+    }
+  } catch (e) { console.error("Erro fidelidade:", e); }
+
   return { ok: true, chave: r.chave, protocolo: r.protocolo, qrcode: r.qrcode,
-           xml: r.nfe_proc || r.xml_assinado || null, numero };
+           xml: r.nfe_proc || r.xml_assinado || null, numero, pontosGanhos };
 }
