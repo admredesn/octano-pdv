@@ -80,8 +80,7 @@ function pdvSelecionarCliente() { pdvToast("Consulta de cliente: proxima fase", 
 function pdvDadosClienteManual() { pdvToast("Dados do cliente: proxima fase", "info"); }
 function pdvCancelarItem() { if (typeof vendaCancelarItem === "function") vendaCancelarItem(); }
 function pdvCancelarCupom() { pdvToast("Cancelar cupom: use Cupons Fiscais (F10)", "info"); }
-function abrirMenuOperador() { pdvToast("Menu Operador: proxima fase", "info"); }
-function abrirMenuGerente() { pdvToast("Menu Gerente: proxima fase", "info"); }
+function abrirMenuGerente() { pdvToast("Menu Gerente: próxima fase", "info"); }
 
 // inicializa quando a pagina carrega
 window.addEventListener("DOMContentLoaded", pdvInit);
