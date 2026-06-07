@@ -23,7 +23,8 @@ function telaPagamento() {
       <div id="pg-formas" style="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 16px"></div>
 
       <label style="color:#555;font-size:0.8rem">CPF/CNPJ no cupom (opcional)</label>
-      <input id="pg-cpf" placeholder="só números (opcional)" style="width:100%;padding:9px;margin:6px 0 16px;border-radius:6px;border:1px solid #ddd;color:#111">
+      <input id="pg-cpf" value="${PDV.venda.clienteManual?.cpf || PDV.venda.cliente?.documento || ''}" placeholder="só números (opcional)" style="width:100%;padding:9px;margin:6px 0 16px;border-radius:6px;border:1px solid #ddd;color:#111">
+      ${PDV.venda.cliente ? `<p style="color:#16a34a;font-size:0.76rem;margin:-10px 0 14px">★ Cliente: ${PDV.venda.cliente.nome} (acumula pontos)</p>` : ""}
 
       <label style="color:#555;font-size:0.8rem">Ambiente</label>
       <select id="pg-ambiente" style="width:100%;padding:9px;margin:6px 0 18px;border-radius:6px;border:1px solid #ddd;color:#111">
@@ -48,7 +49,9 @@ function telaPagamento() {
   render();
 
   box.querySelector("#pg-continuar").addEventListener("click", () => {
-    const cpf = (box.querySelector("#pg-cpf").value || "").replace(/\D/g, "");
+    let cpf = (box.querySelector("#pg-cpf").value || "").replace(/\D/g, "");
+    // fallback: se nao digitou, usa o doc manual (F4) ou o documento do cliente selecionado
+    if (!cpf) cpf = (PDV.venda.clienteManual?.cpf || PDV.venda.cliente?.documento || "").replace(/\D/g, "");
     const ambiente = box.querySelector("#pg-ambiente").value;
     telaPreTransmissao({ tpag: formaSel, cpf, ambiente, total });
   });
@@ -125,6 +128,7 @@ function mostrarResultadoVenda(r) {
       <h2 style="color:#16a34a;margin-bottom:2px;font-size:1.2rem">NFC-e Autorizada</h2>
       <p style="color:#555;font-size:0.8rem;margin-bottom:2px">Nº ${r.numero} · Protocolo ${r.protocolo}</p>
       <p style="color:#aaa;font-size:0.66rem;word-break:break-all;margin-bottom:12px">${r.chave}</p>
+      ${r.pontosGanhos > 0 ? `<p style="color:#16a34a;font-size:0.84rem;margin-bottom:10px">★ +${r.pontosGanhos} pontos de fidelidade</p>` : ""}
       ${qr}
       <div style="display:flex;gap:10px">
         <button onclick="pdvImprimirCupom()" style="flex:1;padding:11px;border-radius:6px;border:none;background:#2563eb;color:#fff;font-weight:600;cursor:pointer">🖨️ Imprimir</button>
