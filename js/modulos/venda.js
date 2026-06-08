@@ -168,20 +168,42 @@ function vendaDesmarcarTodos() {
   vendaRenderAbast();
 }
 
+// acha o produto cadastrado correspondente ao abastecimento (via tanque vinculado).
+// retorna o produto (com ncm/cfop/cst/anp) ou null.
+function _produtoDoAbast(a) {
+  if (!Array.isArray(PDV.produtos)) return null;
+  // 1) pelo tanque vinculado (vinculo mais confiavel)
+  if (a.tanque_id) {
+    const p = PDV.produtos.find(x => x.tanque_id === a.tanque_id);
+    if (p) return p;
+  }
+  // 2) fallback: pelo nome do combustivel
+  const comb = (_abComb(a) || "").toUpperCase().trim();
+  if (comb && comb !== "—") {
+    const p = PDV.produtos.find(x => (x.nome || "").toUpperCase().includes(comb) ||
+                                     comb.includes((x.nome || "").toUpperCase()));
+    if (p) return p;
+  }
+  return null;
+}
+
 // espelha os marcados em PDV.venda.itens (tipo abastecimento) para o fechamento
 function vendaSyncItensComMarcados() {
   // remove os abastecimentos antigos da venda e reinsere os marcados
   PDV.venda.itens = PDV.venda.itens.filter(it => it.tipo !== "abastecimento");
   _abastPendentes.filter(a => _marcados.has(a.id)).forEach(a => {
+    const prod = _produtoDoAbast(a);   // produto cadastrado p/ dados fiscais
     PDV.venda.itens.push({
       tipo: "abastecimento",
       abastecimento_id: a.id,
       tanque_id: a.tanque_id || null,
-      cod: String(a.bico ?? ""),
-      desc: _abComb(a),
+      produto_id: prod ? prod.id : null,
+      cod: prod ? (prod.codigo || String(a.bico ?? "")) : String(a.bico ?? ""),
+      desc: prod ? prod.nome : _abComb(a),
       qtd: Number(a.litros || 0),
       unit: Number(a.preco_litro || 0),
       total: _abValor(a),
+      fiscal: prod || null,   // NCM/CFOP/CST/ANP para a NFC-e
       dados: a,
     });
   });
