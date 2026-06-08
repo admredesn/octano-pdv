@@ -12,7 +12,6 @@ function abrirMenuOperador() {
     { rotulo: "Despesa", icone: "📤", fn: "caixaAbrir('despesa')" },
     { rotulo: "Receita", icone: "📥", fn: "caixaAbrir('receita')" },
     { rotulo: "Leitura X", icone: "📊", fn: "leituraX()" },
-    { rotulo: "Abastecimento", icone: "⛽", fn: "abastecimentoAbrir()" },
     { rotulo: "Aferição", icone: "🧪", fn: "afericaoAbrir()" },
     { rotulo: "Venda a Prazo", icone: "📝", fn: "prazoAbrir()" },
     { rotulo: "Contas a Prazo", icone: "💰", fn: "prazoListar()" },
