@@ -100,7 +100,40 @@ async function cpCancelar(i) {
     if (r.ok) {
       set("✓ NFC-e cancelada! Protocolo " + (r.protocolo_cancelamento || ""), "#4ade80");
       await sb.from("oct_nfce").update({ status: "cancelada", motivo_rejeicao: just.trim() }).eq("id", n.id);
-      await sb.from("oct_pdv_vendas").update({ nfce_status: "cancelada", status: "cancelada" }).eq("nfce_chave", n.chave_nfe);
+      // marca a venda como cancelada e recupera o id dela (para localizar os abastecimentos)
+      const { data: vendas } = await sb.from("oct_pdv_vendas")
+        .update({ nfce_status: "cancelada", status: "cancelada" })
+        .eq("nfce_chave", n.chave_nfe)
+        .select("id");
+      // ESTORNO: abastecimentos daquela(s) venda(s) voltam a 'pendente' e o
+      // estoque do tanque e devolvido (espelho da baixa feita no recebimento).
+      try {
+        const vendaIds = (vendas || []).map(v => v.id).filter(Boolean);
+        if (vendaIds.length) {
+          const { data: abs } = await sb.from("oct_pdv_abastecimentos")
+            .select("id,litros,tanque_id,status")
+            .in("venda_id", vendaIds)
+            .eq("status", "vendido");
+          if (abs && abs.length) {
+            // 1) devolve o combustivel ao estoque, somando por tanque
+            const litrosPorTanque = {};
+            abs.forEach(a => {
+              if (a.tanque_id) litrosPorTanque[a.tanque_id] = (litrosPorTanque[a.tanque_id] || 0) + Number(a.litros || 0);
+            });
+            for (const [tanqueId, litros] of Object.entries(litrosPorTanque)) {
+              const { data: tq } = await sb.from("oct_tanques").select("estoque_atual").eq("id", tanqueId).single();
+              if (tq) {
+                const novo = Number(tq.estoque_atual || 0) + Number(litros);
+                await sb.from("oct_tanques").update({ estoque_atual: novo }).eq("id", tanqueId);
+              }
+            }
+            // 2) abastecimentos voltam para 'pendente' e desvinculam da venda
+            await sb.from("oct_pdv_abastecimentos")
+              .update({ status: "pendente", venda_id: null })
+              .in("id", abs.map(a => a.id));
+          }
+        }
+      } catch (e) { console.error("Erro ao estornar abastecimentos/estoque:", e); }
       setTimeout(() => cpCarregarLista(), 1200);
     } else {
       set("❌ " + (r.cstat_evento || r.cstat_lote || "") + " " + (r.xmotivo || r.erro || "falha"), "#f87171");
