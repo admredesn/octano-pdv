@@ -54,7 +54,7 @@ async function carregarEmpresaEContexto() {
 
   // carrega catalogo de produtos (cache)
   const { data: prods } = await sb.from("oct_produtos")
-    .select("id,nome,codigo,ean,unidade,preco_venda_a,ncm,cest,cfop,cod_anp,desc_anp,ind_combustivel,ind_monofasico,origem,cst_icms,aliq_pis,aliq_cofins")
+    .select("id,nome,codigo,ean,unidade,preco_venda_a,ncm,cest,cfop,cod_anp,desc_anp,ind_combustivel,ind_monofasico,origem,cst_icms,aliq_pis,aliq_cofins,tanque_id")
     .eq("empresa_id", PDV.empresaId).eq("ativo", true).order("nome");
   PDV.produtos = prods || [];
 
