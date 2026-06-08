@@ -78,7 +78,6 @@ document.addEventListener("keydown", (e) => {
 function pdvFecharVenda() { if (typeof telaPagamento === "function") telaPagamento(); else pdvToast("Pagamento: proxima fase", "info"); }
 function pdvCancelarItem() { if (typeof vendaCancelarItem === "function") vendaCancelarItem(); }
 function pdvCancelarCupom() { pdvToast("Cancelar cupom: use Cupons Fiscais (F10)", "info"); }
-function abrirMenuGerente() { pdvToast("Menu Gerente: próxima fase", "info"); }
 
 // inicializa quando a pagina carrega
 window.addEventListener("DOMContentLoaded", pdvInit);
