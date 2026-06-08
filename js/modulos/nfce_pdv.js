@@ -108,6 +108,31 @@ async function pdvEmitirNfce(opts) {
     vendaId = vGrav?.id || null;
   } catch (e) { console.error("Erro ao gravar venda:", e); }
 
+  // marca os abastecimentos desta venda como 'vendido' e baixa o estoque dos tanques.
+  // a baixa de estoque so acontece AQUI (no recebimento), nunca quando o agente grava.
+  try {
+    const absItens = (PDV.venda.itens || []).filter(it => it.tipo === "abastecimento" && it.abastecimento_id);
+    if (absItens.length) {
+      const ids = absItens.map(it => it.abastecimento_id);
+      // 1) marca como vendido + vincula a venda
+      await sb.from("oct_pdv_abastecimentos")
+        .update({ status: "vendido", venda_id: vendaId })
+        .in("id", ids);
+      // 2) baixa o estoque por tanque (soma litros por tanque_id)
+      const litrosPorTanque = {};
+      absItens.forEach(it => {
+        if (it.tanque_id) litrosPorTanque[it.tanque_id] = (litrosPorTanque[it.tanque_id] || 0) + Number(it.qtd || 0);
+      });
+      for (const [tanqueId, litros] of Object.entries(litrosPorTanque)) {
+        const { data: tq } = await sb.from("oct_tanques").select("estoque_atual").eq("id", tanqueId).single();
+        if (tq) {
+          const novo = Number(tq.estoque_atual || 0) - Number(litros);
+          await sb.from("oct_tanques").update({ estoque_atual: novo }).eq("id", tanqueId);
+        }
+      }
+    }
+  } catch (e) { console.error("Erro ao baixar abastecimentos/estoque:", e); }
+
   // fidelidade: credita pontos se a venda tem cliente CADASTRADO (com id)
   try {
     if (PDV.venda.cliente?.id && typeof fidelidadeCreditar === "function") {
