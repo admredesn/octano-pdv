@@ -30,13 +30,19 @@ function pdvMontarNotaNfce(numero, cpf, tpag) {
       qCom = Math.round((vProd / vUnCom) * 1000) / 1000;   // volume ajustado (3 casas)
       // vProd permanece o valor pago; a SEFAZ confere round(qCom*vUnCom,2) === vProd
     }
+    // COMBUSTIVEL: a unidade tributavel (uTrib) deve seguir a Tabela de
+    // Combustiveis Sujeitos a Tributacao Monofasica da SEFAZ. Liquidos usam "LT".
+    // Cadastros costumam ter "LTS"/"L"/"LITRO" -> normaliza para "LT" e evita a
+    // rejeicao 854. Identificamos combustivel pela presenca do codigo ANP.
+    const ehCombustivel = !!(f.cod_anp) || it.tipo === "abastecimento";
+    const unidade = ehCombustivel ? "LT" : (f.unidade || "UN");
     return {
       nItem: i + 1,
       cProd: it.cod || ("ITEM" + (i + 1)),
       xProd: it.desc,
       cEAN: "SEM GTIN", cEANTrib: "SEM GTIN",
       ncm: f.ncm, cest: f.cest || null, cfop: f.cfop,
-      uCom: f.unidade || "UN", uTrib: f.unidade || "UN",
+      uCom: unidade, uTrib: unidade,
       qCom: qCom, vUnCom: vUnCom, vProd: vProd,
       ind_combustivel: f.ind_combustivel || "N", ind_monofasico: f.ind_monofasico || "N",
       cod_anp: f.cod_anp || null, desc_anp: f.desc_anp || null,
