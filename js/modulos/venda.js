@@ -12,6 +12,18 @@
 let _abastPendentes = [];   // [{id, bico, combustivel, litros, preco_litro, valor, vendedor, data_mov, tanque_id}]
 let _marcados = new Set();  // ids marcados
 let _abastCanal = null;     // canal realtime
+let _tanquesIdx = {};       // { tanque_id: numero } para resolver nTanque do encerrante
+
+// carrega os tanques uma vez e indexa por id -> numero
+async function vendaCarregarTanques() {
+  if (Object.keys(_tanquesIdx).length) return _tanquesIdx;
+  try {
+    const { data } = await sb.from("oct_tanques")
+      .select("id,numero").eq("empresa_id", PDV.empresaId);
+    (data || []).forEach(t => { _tanquesIdx[t.id] = t.numero; });
+  } catch (e) { console.error("nao carregou tanques:", e); }
+  return _tanquesIdx;
+}
 
 registrarTela("venda", function (root) {
   root.innerHTML = `
@@ -74,6 +86,7 @@ registrarTela("venda", function (root) {
       </div>
     </div>`;
 
+  vendaCarregarTanques();
   vendaCarregarPendentes();
   vendaAtivarRealtime();
 });
@@ -187,6 +200,98 @@ function _produtoDoAbast(a) {
   return null;
 }
 
+// ---- busca de produtos (loja de conveniencia, SEM tanque vinculado) ----
+// Abre um modal com campo de busca. Combustiveis (com tanque vinculado/cod_anp)
+// nao aparecem aqui — eles vem dos abastecimentos do agente.
+function vendaAbrirBuscaProduto() {
+  const box = abrirModal(`
+    <div style="padding:20px">
+      <h2 style="color:#f97316;margin-bottom:4px">Adicionar produto</h2>
+      <p style="color:#888;font-size:0.8rem;margin-bottom:14px">Produtos da loja (combustível vem dos abastecimentos).</p>
+      <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:12px">
+        <div style="flex:1">
+          <label style="color:#555;font-size:0.74rem">Produto (nome, código ou cód. barras)</label>
+          <input id="bp-busca" placeholder="Digite ou bipe o código..." autocomplete="off"
+            style="width:100%;padding:9px;border-radius:6px;border:1px solid #ddd;color:#111">
+        </div>
+        <div style="width:80px">
+          <label style="color:#555;font-size:0.74rem">Qtd</label>
+          <input id="bp-qtd" type="number" step="0.001" value="1"
+            style="width:100%;padding:9px;border-radius:6px;border:1px solid #ddd;color:#111">
+        </div>
+      </div>
+      <div id="bp-lista" style="max-height:50vh;overflow:auto;border-top:1px solid #eee"></div>
+    </div>`, { maxWidth: "560px" });
+
+  const busca = box.querySelector("#bp-busca");
+  busca.addEventListener("input", () => vendaRenderBuscaProduto(busca.value));
+  busca.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      const termo = (busca.value || "").toLowerCase().trim();
+      const lista = vendaFiltrarProdutos(termo);
+      let p = lista.find(x => (x.codigo || "").toLowerCase() === termo || (x.ean || "").toLowerCase() === termo);
+      if (!p) p = lista[0];
+      if (p) vendaAddProduto(p.id);
+    }
+  });
+  busca.focus();
+  vendaRenderBuscaProduto("");
+}
+
+// produtos elegiveis: SEM tanque vinculado e SEM codigo ANP (exclui combustivel)
+function vendaFiltrarProdutos(termo) {
+  let lista = (PDV.produtos || []).filter(p => !p.tanque_id && !p.cod_anp);
+  termo = (termo || "").toLowerCase().trim();
+  if (termo) {
+    lista = lista.filter(p =>
+      (p.nome || "").toLowerCase().includes(termo) ||
+      (p.codigo || "").toLowerCase().includes(termo) ||
+      (p.ean || "").toLowerCase().includes(termo));
+  }
+  return lista.slice(0, 40);
+}
+
+function vendaRenderBuscaProduto(termo) {
+  const el = document.getElementById("bp-lista");
+  if (!el) return;
+  const lista = vendaFiltrarProdutos(termo);
+  if (!lista.length) {
+    el.innerHTML = '<p style="color:#999;padding:18px;text-align:center;font-size:0.85rem">Nenhum produto encontrado.</p>';
+    return;
+  }
+  el.innerHTML = lista.map(p => {
+    const preco = Number(p.preco_venda_a || 0);
+    const semPreco = preco <= 0;
+    return `<div onclick="vendaAddProduto('${p.id}')"
+      style="display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid #eee;cursor:pointer;color:#222"
+      onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background='#fff'">
+      <span>${p.nome}${p.codigo ? ` <small style="color:#999">${p.codigo}</small>` : ""}</span>
+      <span style="color:${semPreco ? '#dc2626' : '#16a34a'};font-weight:600">${semPreco ? "sem preço" : "R$ " + preco.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+    </div>`;
+  }).join("");
+}
+
+function vendaAddProduto(id) {
+  const p = (PDV.produtos || []).find(x => x.id === id);
+  if (!p) return;
+  const preco = Number(p.preco_venda_a || 0);
+  if (preco <= 0) { pdvToast(`"${p.nome}" está sem preço de venda.`, "alerta"); return; }
+  const qtd = parseFloat(document.getElementById("bp-qtd")?.value) || 1;
+  PDV.venda.itens.push({
+    tipo: "produto",
+    produto_id: p.id,
+    cod: p.codigo || "",
+    desc: p.nome,
+    qtd: qtd,
+    unit: preco,
+    total: +(qtd * preco).toFixed(2),
+    fiscal: p,   // dados fiscais p/ NFC-e
+  });
+  pdvToast(`${p.nome} adicionado.`, "sucesso");
+  fecharModal();
+  vendaRenderItens();
+}
+
 // espelha os marcados em PDV.venda.itens (tipo abastecimento) para o fechamento
 function vendaSyncItensComMarcados() {
   // remove os abastecimentos antigos da venda e reinsere os marcados
@@ -208,7 +313,7 @@ function vendaSyncItensComMarcados() {
       enc_ini: a.venc_ini != null ? Number(a.venc_ini) : null,
       enc_fin: a.venc_fin != null ? Number(a.venc_fin) : null,
       n_bico: a.bico != null ? Number(a.bico) : null,
-      n_tanque: a.tanque != null ? Number(a.tanque) : null,
+      n_tanque: (a.tanque != null ? Number(a.tanque) : (_tanquesIdx[a.tanque_id] != null ? Number(_tanquesIdx[a.tanque_id]) : null)),
       dados: a,
     });
   });
@@ -238,15 +343,32 @@ function vendaRenderItens() {
 // remover um item do cupom tambem desmarca o abastecimento na lista
 function vendaDesmarcarItem(i) {
   const it = PDV.venda.itens[i];
-  if (it && it.abastecimento_id) _marcados.delete(it.abastecimento_id);
-  PDV.venda.itens.splice(i, 1);
-  vendaRenderAbast();
+  if (!it) return;
+  if (it.abastecimento_id) {
+    // abastecimento: desmarca na lista (o sync remove o item)
+    _marcados.delete(it.abastecimento_id);
+    vendaRenderAbast();
+  } else {
+    // produto: remove direto
+    PDV.venda.itens.splice(i, 1);
+    vendaRenderItens();
+  }
+}
+
+// F5 - cancela o ultimo item adicionado (produto ou abastecimento)
+function vendaCancelarItem() {
+  const itens = PDV.venda.itens;
+  if (!itens.length) { pdvToast("Nenhum item para cancelar.", "info"); return; }
+  vendaDesmarcarItem(itens.length - 1);
+  pdvToast("Último item removido.", "info");
 }
 
 // ---- recebimento ----
 function vendaReceberMarcados() {
   if (!PDV.turno) { pdvToast("Abra um turno antes.", "alerta"); return; }
-  if (!_marcados.size) { pdvToast("Marque ao menos um abastecimento.", "alerta"); return; }
+  // permite fechar com abastecimentos marcados OU produtos adicionados
+  const temProduto = PDV.venda.itens.some(it => it.tipo === "produto");
+  if (!_marcados.size && !temProduto) { pdvToast("Marque um abastecimento ou adicione um produto.", "alerta"); return; }
   vendaSyncItensComMarcados();
   if (typeof telaPagamento === "function") telaPagamento();
   else pdvToast("Fluxo de pagamento indisponível.", "erro");
