@@ -13,6 +13,11 @@ function montarLayoutPrincipal() {
         <span style="font-size:0.92rem">${emp.nome || "—"}</span>
       </div>
       <div style="display:flex;align-items:center;gap:18px;font-size:0.82rem">
+        <span id="pdv-h-cliente" onclick="pdvSelecionarCliente()" title="F3 - trocar cliente"
+          style="display:flex;align-items:center;gap:6px;background:#2a2d3e;padding:5px 12px;border-radius:6px;cursor:pointer;border:1px solid #3a3f5a">
+          <span style="color:#9aa">👤 Cliente:</span>
+          <strong id="pdv-h-cliente-nome" style="color:#4ade80">Consumidor Final</strong>
+        </span>
         <span>Operador: <strong id="pdv-h-operador">${PDV.operador?.nome || "—"}</strong></span>
         <span>Turno: <strong id="pdv-h-turno" style="color:${PDV.turno ? '#4ade80' : '#f87171'}">${PDV.turno ? "ABERTO #" + PDV.turno.numero : "FECHADO"}</strong></span>
         <span id="pdv-h-relogio"></span>
@@ -78,6 +83,24 @@ document.addEventListener("keydown", (e) => {
 function pdvFecharVenda() { if (typeof telaPagamento === "function") telaPagamento(); else pdvToast("Pagamento: proxima fase", "info"); }
 function pdvCancelarItem() { if (typeof vendaCancelarItem === "function") vendaCancelarItem(); }
 function pdvAddItem() { if (typeof vendaAbrirBuscaProduto === "function") vendaAbrirBuscaProduto(); else pdvToast("Abra a tela de venda primeiro.", "info"); }
+
+// atualiza o indicador de cliente no cabecalho. Padrao: "Consumidor Final".
+// Mostra o cliente cadastrado (F3) ou os dados manuais (F4), se houver.
+function pdvAtualizarIndicadorCliente() {
+  const el = document.getElementById("pdv-h-cliente-nome");
+  if (!el) return;
+  const v = PDV.venda || {};
+  if (v.cliente && v.cliente.nome) {
+    el.textContent = v.cliente.nome;
+    el.style.color = "#fbbf24";   // amarelo: cliente identificado
+  } else if (v.clienteManual && (v.clienteManual.nome || v.clienteManual.cpf)) {
+    el.textContent = v.clienteManual.nome || ("CPF " + v.clienteManual.cpf);
+    el.style.color = "#fbbf24";
+  } else {
+    el.textContent = "Consumidor Final";
+    el.style.color = "#4ade80";   // verde: padrao
+  }
+}
 function pdvCancelarCupom() { pdvToast("Cancelar cupom: use Cupons Fiscais (F10)", "info"); }
 
 // inicializa quando a pagina carrega
