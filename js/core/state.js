@@ -24,6 +24,8 @@ const PDV = {
 
   // --- cache ---
   produtos: [],          // catalogo carregado uma vez
+  tanques: [],           // tanques (cache, sincronizado com o retaguarda)
+  bicos: [],             // bicos (cache, sincronizado com o retaguarda)
   abastecimentos: [],    // abastecimentos disponiveis (da tabela / futuramente bomba)
 
   // --- helpers de venda ---
