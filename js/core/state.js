@@ -37,6 +37,8 @@ const PDV = {
   },
   limparVenda() {
     this.venda = { itens: [], cliente: null, clienteManual: null, pagamentos: [], obs: "" };
+    // volta o indicador do cabecalho para "Consumidor Final"
+    if (typeof pdvAtualizarIndicadorCliente === "function") pdvAtualizarIndicadorCliente();
   },
 };
 
