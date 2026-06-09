@@ -72,7 +72,7 @@ async function carregarEmpresaEContexto() {
 // Reutilizada no login e pela sincronizacao automatica (realtime).
 async function pdvCarregarProdutos() {
   const { data: prods } = await sb.from("oct_produtos")
-    .select("id,nome,codigo,ean,unidade,preco_venda_a,ncm,cest,cfop,cod_anp,desc_anp,ind_combustivel,ind_monofasico,origem,cst_icms,aliq_pis,aliq_cofins,tanque_id")
+    .select("id,nome,codigo,ean,unidade,preco_venda_a,ncm,cest,cfop,cod_anp,desc_anp,ind_combustivel,ind_monofasico,origem,cst_icms,aliq_icms,aliq_pis,aliq_cofins,csosn,tanque_id")
     .eq("empresa_id", PDV.empresaId).eq("ativo", true).order("nome");
   PDV.produtos = prods || [];
   return PDV.produtos;
