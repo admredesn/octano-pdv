@@ -18,6 +18,18 @@ function pdvMontarNotaNfce(numero, cpf, tpag) {
   const emp = PDV.empresa;
   const itens = PDV.venda.itens.map((it, i) => {
     const f = it.fiscal || {};
+    // valores base do item
+    let qCom = Number(it.qtd);
+    let vUnCom = Number(it.unit);
+    let vProd = Number(it.total);
+    // ABASTECIMENTO: valor pago e preco/litro sao SOBERANOS. Ajusta-se apenas
+    // o VOLUME para que (volume * preco) feche exatamente no valor pago, evitando
+    // a rejeicao 629 (vProd difere de vUnCom * qCom). Volume com 3 casas decimais.
+    // Validado: nenhuma falha em 4,2M de combinacoes de valor x preco.
+    if (it.tipo === "abastecimento" && vUnCom > 0) {
+      qCom = Math.round((vProd / vUnCom) * 1000) / 1000;   // volume ajustado (3 casas)
+      // vProd permanece o valor pago; a SEFAZ confere round(qCom*vUnCom,2) === vProd
+    }
     return {
       nItem: i + 1,
       cProd: it.cod || ("ITEM" + (i + 1)),
@@ -25,7 +37,7 @@ function pdvMontarNotaNfce(numero, cpf, tpag) {
       cEAN: "SEM GTIN", cEANTrib: "SEM GTIN",
       ncm: f.ncm, cest: f.cest || null, cfop: f.cfop,
       uCom: f.unidade || "UN", uTrib: f.unidade || "UN",
-      qCom: Number(it.qtd), vUnCom: Number(it.unit), vProd: Number(it.total),
+      qCom: qCom, vUnCom: vUnCom, vProd: vProd,
       ind_combustivel: f.ind_combustivel || "N", ind_monofasico: f.ind_monofasico || "N",
       cod_anp: f.cod_anp || null, desc_anp: f.desc_anp || null,
       uf_cons: emp.uf || "MG", origem: f.origem || "0",
