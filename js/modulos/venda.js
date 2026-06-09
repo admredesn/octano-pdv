@@ -383,10 +383,13 @@ function vendaReceberUm(id) {
   else pdvToast("Fluxo de pagamento indisponível.", "erro");
 }
 
-// ---- realtime ----
+// ---- realtime (com reconexao automatica + polling de seguranca) ----
+let _abastPollTimer = null;
+let _abastReconnTimer = null;
+
 function vendaAtivarRealtime() {
   try {
-    if (_abastCanal) { sb.removeChannel(_abastCanal); _abastCanal = null; }
+    if (_abastCanal) { try { sb.removeChannel(_abastCanal); } catch (e) {} _abastCanal = null; }
     _abastCanal = sb
       .channel("abast-pendentes")
       .on("postgres_changes",
@@ -397,13 +400,45 @@ function vendaAtivarRealtime() {
         })
       .subscribe((status) => {
         const el = document.getElementById("v-rt");
+        const ok = status === "SUBSCRIBED";
         if (el) {
-          const ok = status === "SUBSCRIBED";
           el.style.color = ok ? "#16a34a" : "#d97706";
           el.title = ok ? "tempo real ativo" : "reconectando...";
+        }
+        // se o canal caiu (fechou/erro/timeout), agenda reconexao automatica.
+        if (["CLOSED", "CHANNEL_ERROR", "TIMED_OUT"].includes(status)) {
+          _agendarReconexao();
+        } else if (ok) {
+          // reconectou: ao voltar, recarrega para pegar o que perdeu enquanto caido
+          if (telaAtual() === "venda") vendaCarregarPendentes();
         }
       });
   } catch (e) {
     console.error("realtime indisponivel:", e);
+    _agendarReconexao();
   }
+  _iniciarPollingSeguranca();
+}
+
+// recria o canal apos uma pausa (evita loop agressivo de reconexao)
+function _agendarReconexao() {
+  if (_abastReconnTimer) return;            // ja agendado
+  _abastReconnTimer = setTimeout(() => {
+    _abastReconnTimer = null;
+    if (telaAtual() === "venda") {
+      console.log("[realtime] reconectando canal de abastecimentos...");
+      vendaAtivarRealtime();
+    }
+  }, 5000);
+}
+
+// rede de seguranca: mesmo que o realtime falhe de vez, recarrega a lista
+// periodicamente para a tela nunca ficar congelada. Leve (a cada 30s).
+function _iniciarPollingSeguranca() {
+  if (_abastPollTimer) return;
+  _abastPollTimer = setInterval(() => {
+    if (telaAtual() === "venda") {
+      vendaCarregarPendentes();
+    }
+  }, 30000);
 }
