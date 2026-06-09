@@ -60,12 +60,14 @@ function clienteSelecionar(c) {
   PDV.venda.cliente = c;
   PDV.venda.clienteManual = null; // selecionar cliente cadastrado limpa dados manuais
   fecharModal();
+  if (typeof pdvAtualizarIndicadorCliente === "function") pdvAtualizarIndicadorCliente();
   pdvToast(`Cliente: ${c.nome}`, "sucesso");
 }
 
 function clienteRemover() {
   PDV.venda.cliente = null;
   fecharModal();
+  if (typeof pdvAtualizarIndicadorCliente === "function") pdvAtualizarIndicadorCliente();
   pdvToast("Cliente removido da venda.", "info");
 }
 
@@ -140,6 +142,7 @@ function pdvDadosClienteManual() {
     if (doc && doc.length !== 11 && doc.length !== 14) { msg.style.color = "#dc2626"; msg.textContent = "CPF (11) ou CNPJ (14) dígitos."; return; }
     PDV.venda.clienteManual = doc ? { cpf: doc, nome: nome || null } : null;
     fecharModal();
+    if (typeof pdvAtualizarIndicadorCliente === "function") pdvAtualizarIndicadorCliente();
     pdvToast(doc ? `Documento no cupom: ${doc}` : "Dados do cupom limpos.", "sucesso");
   });
 }
