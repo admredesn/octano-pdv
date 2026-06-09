@@ -30,12 +30,12 @@ function pdvMontarNotaNfce(numero, cpf, tpag) {
       qCom = Math.round((vProd / vUnCom) * 1000) / 1000;   // volume ajustado (3 casas)
       // vProd permanece o valor pago; a SEFAZ confere round(qCom*vUnCom,2) === vProd
     }
-    // COMBUSTIVEL: a unidade tributavel (uTrib) deve seguir a Tabela de
-    // Combustiveis Sujeitos a Tributacao Monofasica da SEFAZ. Liquidos usam "LT".
-    // Cadastros costumam ter "LTS"/"L"/"LITRO" -> normaliza para "LT" e evita a
-    // rejeicao 854. Identificamos combustivel pela presenca do codigo ANP.
+    // COMBUSTIVEL: a unidade tributavel deve ser "L" (litro) em MG. Validado
+    // contra a SEFAZ-MG: "LT"/"LITRO"/"LTS" dao rejeicao 854; so "L" passa.
+    // O servidor tambem forca "L" e monta o grupo <encerrante>; aqui alinhamos
+    // para a tela de conferencia exibir a unidade correta.
     const ehCombustivel = !!(f.cod_anp) || it.tipo === "abastecimento";
-    const unidade = ehCombustivel ? "LT" : (f.unidade || "UN");
+    const unidade = ehCombustivel ? "L" : (f.unidade || "UN");
     return {
       nItem: i + 1,
       cProd: it.cod || ("ITEM" + (i + 1)),
@@ -44,6 +44,12 @@ function pdvMontarNotaNfce(numero, cpf, tpag) {
       ncm: f.ncm, cest: f.cest || null, cfop: f.cfop,
       uCom: unidade, uTrib: unidade,
       qCom: qCom, vUnCom: vUnCom, vProd: vProd,
+      // encerrante + bico/tanque p/ o grupo <comb> (combustivel MG): o servidor
+      // monta <encerrante> e usa unidade "L" quando ha cod_anp.
+      enc_ini: it.enc_ini != null ? it.enc_ini : null,
+      enc_fin: it.enc_fin != null ? it.enc_fin : null,
+      n_bico: it.n_bico != null ? it.n_bico : null,
+      n_tanque: it.n_tanque != null ? it.n_tanque : null,
       ind_combustivel: f.ind_combustivel || "N", ind_monofasico: f.ind_monofasico || "N",
       cod_anp: f.cod_anp || null, desc_anp: f.desc_anp || null,
       uf_cons: emp.uf || "MG", origem: f.origem || "0",
