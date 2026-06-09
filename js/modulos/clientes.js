@@ -1,7 +1,8 @@
 // ============================================================
 // octano-pdv  -  CLIENTES (consulta, cadastro, selecao, dados manuais)
 // ============================================================
-// Reusa a tabela oct_clientes do retaguarda (id, nome, documento, telefone, email, ativo).
+// Fonte unica: tabela oct_pessoas (compartilhada com o retaguarda). Filtra
+// quem tem a classificacao 'cliente'. Cadastrar aqui cria a pessoa ja como cliente.
 
 // ---- F3: selecionar cliente para a venda ----
 function pdvSelecionarCliente() {
@@ -28,15 +29,25 @@ async function clienteBuscar(termo) {
   const el = document.getElementById("cl-lista");
   if (!el) return;
   termo = (termo || "").trim();
-  let q = sb.from("oct_clientes").select("id,nome,documento,telefone,email").eq("ativo", true).order("nome").limit(40);
+  // Fonte unica de pessoas (oct_pessoas). Filtra quem e 'cliente' na classificacao.
+  // cs = contains: classificacoes @> {cliente}. Tambem aceita o 'tipo' antigo.
+  let q = sb.from("oct_pessoas")
+    .select("id,nome,documento,telefone,email,classificacoes,tipo")
+    .eq("empresa_id", PDV.empresaId).eq("ativo", true)
+    .order("nome").limit(40);
   if (termo) q = q.or(`nome.ilike.%${termo}%,documento.ilike.%${termo}%,telefone.ilike.%${termo}%`);
   const { data } = await q;
-  if (!data || !data.length) {
+  // mantem apenas quem e cliente (classificacoes contem 'cliente', ou tipo antigo cliente/ambos)
+  const lista = (data || []).filter(p =>
+    (Array.isArray(p.classificacoes) && p.classificacoes.includes("cliente")) ||
+    p.tipo === "cliente" || p.tipo === "ambos"
+  );
+  if (!lista.length) {
     el.innerHTML = '<p style="color:#999;padding:14px;text-align:center;font-size:0.85rem">Nenhum cliente. Use "+ Novo cliente".</p>';
     return;
   }
-  el.innerHTML = data.map(c => `
-    <div onclick='clienteSelecionar(${JSON.stringify(c).replace(/'/g, "&#39;")})' style="display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid #eee;cursor:pointer" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+  el.innerHTML = lista.map(c => `
+    <div onclick='clienteSelecionar(${JSON.stringify({id:c.id,nome:c.nome,documento:c.documento,telefone:c.telefone,email:c.email}).replace(/'/g, "&#39;")})' style="display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid #eee;cursor:pointer" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
       <div>
         <div style="color:#111;font-weight:600;font-size:0.9rem">${c.nome}</div>
         <div style="color:#888;font-size:0.76rem">${c.documento || "sem documento"}${c.telefone ? " · " + c.telefone : ""}</div>
@@ -89,10 +100,16 @@ async function clienteSalvar(box) {
   const msg = box.querySelector("#nc-msg");
   if (!nome) { msg.style.color = "#dc2626"; msg.textContent = "Informe o nome."; return; }
   msg.style.color = "#888"; msg.textContent = "Salvando...";
-  // oct_clientes exige email unico e nao-nulo. Sem email, gera um placeholder unico.
-  const emailFinal = email || `sem-email-${doc || Date.now()}@octano.local`;
-  const { data, error } = await sb.from("oct_clientes").insert({
-    nome, documento: doc || "", telefone: tel || "", email: emailFinal, ativo: true,
+  // Cadastra na fonte unica (oct_pessoas) ja classificado como 'cliente'.
+  const { data, error } = await sb.from("oct_pessoas").insert({
+    empresa_id: PDV.empresaId,
+    nome,
+    documento: doc || null,
+    telefone: tel || null,
+    email: email || null,
+    classificacoes: ["cliente"],
+    tipo: "cliente",
+    ativo: true,
   }).select("id,nome,documento,telefone,email").single();
   if (error) { msg.style.color = "#dc2626"; msg.textContent = "Erro: " + error.message; return; }
   clienteSelecionar(data);
