@@ -76,8 +76,72 @@ document.addEventListener("keydown", (e) => {
   if (map[e.key] && typeof window[map[e.key]] === "function") {
     e.preventDefault();
     window[map[e.key]]();
+    return;
+  }
+  if (e.key === "Escape") {
+    pdvTratarEsc();
   }
 });
+
+// ---- "voltar para casa" (tela de abastecimentos pendentes = 'venda') ----
+const PDV_TELA_PADRAO = "venda";
+let _escTimer = null;       // janela de tempo para contar o 2o ESC
+let _inatividadeTimer = null;
+
+function _temModalAberto() {
+  return !!document.getElementById("pdv-modal-overlay");
+}
+
+// ESC: 1o fecha modal (se houver); 2 ESCs seguidos (sem modal) voltam pra casa.
+function pdvTratarEsc() {
+  if (!PDV.empresa) return;
+  if (_temModalAberto()) {
+    // 1o ESC fecha o modal; arma janela para o proximo ESC voltar pra casa
+    fecharModal();
+    _armarSegundoEsc();
+    return;
+  }
+  // sem modal: precisa de 2 ESCs dentro da janela de tempo
+  if (_escTimer) {
+    // segundo ESC dentro da janela -> volta pra casa
+    clearTimeout(_escTimer); _escTimer = null;
+    pdvVoltarParaCasa();
+  } else {
+    _armarSegundoEsc();
+  }
+}
+
+function _armarSegundoEsc() {
+  if (_escTimer) clearTimeout(_escTimer);
+  _escTimer = setTimeout(() => { _escTimer = null; }, 1500); // 1,5s para o 2o ESC
+}
+
+function pdvVoltarParaCasa() {
+  if (typeof telaAtual === "function" && telaAtual() !== PDV_TELA_PADRAO) {
+    irPara(PDV_TELA_PADRAO);
+  }
+}
+
+// ---- timeout de inatividade: volta pra casa apos 60s sem interacao ----
+// Poupa telas criticas: se ha um modal aberto (pagamento, cliente, etc.),
+// NAO dispara, para nao interromper uma operacao em andamento.
+function _resetarInatividade() {
+  if (_inatividadeTimer) clearTimeout(_inatividadeTimer);
+  _inatividadeTimer = setTimeout(() => {
+    if (!PDV.empresa) return;
+    if (_temModalAberto()) { _resetarInatividade(); return; } // poupa operacao em andamento
+    if (typeof telaAtual === "function" && telaAtual() !== PDV_TELA_PADRAO) {
+      pdvVoltarParaCasa();
+    }
+  }, 60000); // 60s
+}
+
+// qualquer interacao do usuario reinicia o contador de inatividade
+["mousedown", "keydown", "mousemove", "touchstart", "wheel"].forEach(ev => {
+  document.addEventListener(ev, _resetarInatividade, { passive: true });
+});
+// inicia o contador quando o modulo carrega
+_resetarInatividade();
 
 // stubs (serao implementados nas proximas fases) - evitam erro ao clicar
 function pdvFecharVenda() { if (typeof telaPagamento === "function") telaPagamento(); else pdvToast("Pagamento: proxima fase", "info"); }
