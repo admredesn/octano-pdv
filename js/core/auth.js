@@ -53,18 +53,29 @@ async function carregarEmpresaEContexto() {
   PDV.empresa = perfil.oct_empresas;
 
   // carrega catalogo de produtos (cache)
-  const { data: prods } = await sb.from("oct_produtos")
-    .select("id,nome,codigo,ean,unidade,preco_venda_a,ncm,cest,cfop,cod_anp,desc_anp,ind_combustivel,ind_monofasico,origem,cst_icms,aliq_pis,aliq_cofins,tanque_id")
-    .eq("empresa_id", PDV.empresaId).eq("ativo", true).order("nome");
-  PDV.produtos = prods || [];
+  await pdvCarregarProdutos();
 
   // verifica turno aberto
   await verificarTurnoAberto();
+
+  // sincronizacao automatica: escuta mudancas nos cadastros (retaguarda)
+  // e recarrega o cache do PDV sem precisar atualizar a pagina.
+  if (typeof pdvIniciarSync === "function") pdvIniciarSync();
 
   // monta o layout principal e vai pra tela de venda (ou abertura de turno)
   montarLayoutPrincipal();
   if (PDV.turno) irPara("venda");
   else irPara("turno");
+}
+
+// carrega/recarrega o catalogo de produtos no cache (PDV.produtos).
+// Reutilizada no login e pela sincronizacao automatica (realtime).
+async function pdvCarregarProdutos() {
+  const { data: prods } = await sb.from("oct_produtos")
+    .select("id,nome,codigo,ean,unidade,preco_venda_a,ncm,cest,cfop,cod_anp,desc_anp,ind_combustivel,ind_monofasico,origem,cst_icms,aliq_pis,aliq_cofins,tanque_id")
+    .eq("empresa_id", PDV.empresaId).eq("ativo", true).order("nome");
+  PDV.produtos = prods || [];
+  return PDV.produtos;
 }
 
 async function pdvLogout() {
