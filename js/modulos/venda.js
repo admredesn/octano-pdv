@@ -83,7 +83,7 @@ async function vendaCarregarPendentes() {
   if (!PDV.empresaId) return;
   const { data, error } = await sb
     .from("oct_pdv_abastecimentos")
-    .select("id,bico,combustivel,produto_nome,litros,preco_litro,valor,valor_total,vendedor,data_mov,data_abast,tanque_id,tipo")
+    .select("id,bico,combustivel,produto_nome,litros,preco_litro,valor,valor_total,vendedor,data_mov,data_abast,tanque_id,tanque,venc_ini,venc_fin,tipo")
     .eq("empresa_id", PDV.empresaId)
     .eq("status", "pendente")
     .order("data_mov", { ascending: true });
@@ -204,6 +204,11 @@ function vendaSyncItensComMarcados() {
       unit: Number(a.preco_litro || 0),
       total: _abValor(a),
       fiscal: prod || null,   // NCM/CFOP/CST/ANP para a NFC-e
+      // encerrante + bico/tanque para o grupo <comb> da NFC-e (combustivel MG)
+      enc_ini: a.venc_ini != null ? Number(a.venc_ini) : null,
+      enc_fin: a.venc_fin != null ? Number(a.venc_fin) : null,
+      n_bico: a.bico != null ? Number(a.bico) : null,
+      n_tanque: a.tanque != null ? Number(a.tanque) : null,
       dados: a,
     });
   });
