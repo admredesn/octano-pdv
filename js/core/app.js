@@ -44,7 +44,7 @@ function montarBarraAcoes() {
   if (!barra) return;
   const acoes = [
     { tecla: "F1", label: "Fechar Venda", fn: "pdvFecharVenda()" },
-    { tecla: "F2", label: "Add Item", fn: "irPara('venda')" },
+    { tecla: "F2", label: "Add Item", fn: "pdvAddItem()" },
     { tecla: "F3", label: "Cliente", fn: "pdvSelecionarCliente()" },
     { tecla: "F4", label: "Dados Cliente", fn: "pdvDadosClienteManual()" },
     { tecla: "F5", label: "Cancelar Item", fn: "pdvCancelarItem()" },
@@ -64,7 +64,7 @@ function montarBarraAcoes() {
 document.addEventListener("keydown", (e) => {
   if (!PDV.empresa) return; // so depois de logado
   const map = {
-    F1: "pdvFecharVenda", F3: "pdvSelecionarCliente", F4: "pdvDadosClienteManual",
+    F1: "pdvFecharVenda", F2: "pdvAddItem", F3: "pdvSelecionarCliente", F4: "pdvDadosClienteManual",
     F5: "pdvCancelarItem", F6: "pdvCancelarCupom", F7: "abrirMenuOperador",
     F8: "abrirMenuGerente",
   };
@@ -77,6 +77,7 @@ document.addEventListener("keydown", (e) => {
 // stubs (serao implementados nas proximas fases) - evitam erro ao clicar
 function pdvFecharVenda() { if (typeof telaPagamento === "function") telaPagamento(); else pdvToast("Pagamento: proxima fase", "info"); }
 function pdvCancelarItem() { if (typeof vendaCancelarItem === "function") vendaCancelarItem(); }
+function pdvAddItem() { if (typeof vendaAbrirBuscaProduto === "function") vendaAbrirBuscaProduto(); else pdvToast("Abra a tela de venda primeiro.", "info"); }
 function pdvCancelarCupom() { pdvToast("Cancelar cupom: use Cupons Fiscais (F10)", "info"); }
 
 // inicializa quando a pagina carrega
