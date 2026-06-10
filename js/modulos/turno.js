@@ -36,6 +36,19 @@ async function abrirTurno() {
   const valor = parseFloat(document.getElementById("t-valor").value) || 0;
   const msg = document.getElementById("t-msg");
   if (!operador) { msg.style.color = "#f87171"; msg.textContent = "Informe o operador."; return; }
+
+  // PONTO OBRIGATORIO: registra a ENTRADA (foto) antes de abrir o turno.
+  if (typeof pontoRegistrarObrigatorio === "function") {
+    msg.style.color = "#888"; msg.textContent = "Registre o ponto de entrada para abrir o turno...";
+    const reg = await pontoRegistrarObrigatorio({ tipo: "entrada" });
+    if (!reg) {
+      msg.style.color = "#f87171";
+      msg.textContent = "Registro de ponto obrigatório. O turno não foi aberto.";
+      return;
+    }
+    PDV._pontoEntradaId = reg.id;
+  }
+
   msg.style.color = "#888"; msg.textContent = "Abrindo turno...";
 
   // proximo numero de turno
@@ -93,6 +106,18 @@ async function carregarResumoTurno() {
 
 async function fecharTurno() {
   const msg = document.getElementById("t-msg");
+
+  // PONTO OBRIGATORIO: registra a SAIDA (foto) antes de fechar o turno.
+  if (typeof pontoRegistrarObrigatorio === "function") {
+    msg.style.color = "#888"; msg.textContent = "Registre o ponto de saída para fechar o turno...";
+    const reg = await pontoRegistrarObrigatorio({ tipo: "saida" });
+    if (!reg) {
+      msg.style.color = "#f87171";
+      msg.textContent = "Registro de ponto obrigatório. O turno não foi fechado.";
+      return;
+    }
+  }
+
   msg.style.color = "#888"; msg.textContent = "Fechando turno...";
   const { error } = await sb.from("oct_pdv_turnos").update({
     status: "fechado", fechado_em: new Date().toISOString(),
