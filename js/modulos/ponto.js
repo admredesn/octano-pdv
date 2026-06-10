@@ -110,15 +110,23 @@ async function pontoAbrir(opts) {
     camMsg.style.display = "block";
     camMsg.style.color = "#888";
     camMsg.textContent = "Iniciando câmera...";
-    // tenta config ideal; se der erro de fonte ocupada, tenta config mínima
+    // tenta varias resolucoes: algumas webcams (chips genericos) travam em
+    // resolucoes altas e so iniciam em 320x240. Tenta da menor p/ maior.
     const tentativas = [
-      { video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, audio: false },
+      { video: { width: { ideal: 320 }, height: { ideal: 240 } }, audio: false },
+      { video: { width: { ideal: 480 }, height: { ideal: 360 } }, audio: false },
+      { video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: false },
       { video: true, audio: false },
     ];
+    // getUserMedia com timeout: se uma resolucao travar, passa pra proxima
+    const comTimeout = (constraints, ms) => Promise.race([
+      navigator.mediaDevices.getUserMedia(constraints),
+      new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error("timeout"), { name: "AbortError" })), ms)),
+    ]);
     let ultimoErro = null;
     for (const constraints of tentativas) {
       try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        stream = await comTimeout(constraints, 4000);
         video.srcObject = stream;
         video.style.display = "block";
         camMsg.style.display = "none";
