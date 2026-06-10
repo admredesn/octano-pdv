@@ -61,6 +61,7 @@ async function pontoAbrir(opts) {
 
       <div style="display:flex;gap:8px;margin-bottom:14px">
         <button id="pt-capturar" style="flex:1;padding:10px;border-radius:6px;border:1px solid #2563eb;background:#2563eb;color:#fff;cursor:pointer;font-weight:600" disabled>📷 Capturar</button>
+        <button id="pt-tentar" style="flex:1;padding:10px;border-radius:6px;border:1px solid #d97706;background:#fff;color:#d97706;cursor:pointer;font-weight:600;display:none">↻ Tentar câmera novamente</button>
         <button id="pt-refazer" style="flex:1;padding:10px;border-radius:6px;border:1px solid #ddd;background:#fff;color:#555;cursor:pointer;font-weight:600;display:none">↻ Refazer</button>
       </div>
 
@@ -78,6 +79,7 @@ async function pontoAbrir(opts) {
   const canvas = box.querySelector("#pt-canvas");
   const camMsg = box.querySelector("#pt-cam-msg");
   const btnCap = box.querySelector("#pt-capturar");
+  const btnTentar = box.querySelector("#pt-tentar");
   const btnRefazer = box.querySelector("#pt-refazer");
   const btnSalvar = box.querySelector("#pt-salvar");
   const btnVoltar = box.querySelector("#pt-voltar");
@@ -102,20 +104,56 @@ async function pontoAbrir(opts) {
   }));
   pintarTipo();
 
-  // inicia a webcam
+  // inicia a webcam (com mensagem de erro real e botão de retry)
   async function iniciarCamera() {
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
-      video.srcObject = stream;
-      video.style.display = "block";
-      camMsg.style.display = "none";
-      btnCap.disabled = false;
-    } catch (e) {
-      camMsg.textContent = "Não foi possível acessar a câmera. Verifique as permissões do navegador.";
-      camMsg.style.color = "#dc2626";
-      console.error("ponto: getUserMedia", e);
+    btnTentar.style.display = "none";
+    camMsg.style.display = "block";
+    camMsg.style.color = "#888";
+    camMsg.textContent = "Iniciando câmera...";
+    // tenta config ideal; se der erro de fonte ocupada, tenta config mínima
+    const tentativas = [
+      { video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, audio: false },
+      { video: true, audio: false },
+    ];
+    let ultimoErro = null;
+    for (const constraints of tentativas) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = stream;
+        video.style.display = "block";
+        camMsg.style.display = "none";
+        btnCap.disabled = false;
+        btnCap.style.display = "block";
+        btnTentar.style.display = "none";
+        return; // sucesso
+      } catch (e) {
+        ultimoErro = e;
+        // se foi permissão negada, não adianta tentar de novo automaticamente
+        if (e.name === "NotAllowedError" || e.name === "SecurityError") break;
+      }
     }
+    // falhou: mostra o motivo real e o botão de tentar de novo
+    console.error("ponto: getUserMedia", ultimoErro);
+    const nome = ultimoErro?.name || "Erro";
+    let dica;
+    if (nome === "NotAllowedError" || nome === "SecurityError")
+      dica = "Permissão de câmera negada. Libere a câmera para este site nas configurações do navegador.";
+    else if (nome === "NotReadableError" || nome === "AbortError")
+      dica = "A câmera está sendo usada por outro programa ou aba (ex.: outra janela de vídeo, Teams, Zoom, ou o preview de permissão do navegador). Feche os outros usos e tente novamente.";
+    else if (nome === "NotFoundError" || nome === "OverconstrainedError")
+      dica = "Nenhuma câmera compatível encontrada neste computador.";
+    else
+      dica = "Não foi possível acessar a câmera.";
+    camMsg.style.display = "block";
+    camMsg.style.color = "#dc2626";
+    camMsg.innerHTML = `${dica}<br><span style="color:#888;font-size:0.74rem">(${nome})</span>`;
+    btnCap.disabled = true;
+    btnCap.style.display = "none";
+    btnTentar.style.display = "block";
   }
+
+  // botão "tentar câmera novamente"
+  btnTentar.addEventListener("click", () => iniciarCamera());
 
   function pararCamera() {
     if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
