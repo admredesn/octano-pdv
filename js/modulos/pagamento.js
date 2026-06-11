@@ -42,7 +42,7 @@ function pdvFormaNome(cod) {
 // Aplica a tabela de preço quando há cliente vinculado E a forma escolhida
 // está entre as formas da tabela. Ajusta o preço/litro (volume intacto).
 // Guarda o preço original em it._unitOriginal para poder reverter.
-async function pdvAplicarTabelaPreco(codForma, formas, box) {
+async function pdvAplicarTabelaPreco(formaId, formas, box) {
   const elAjuste = box.querySelector("#pg-ajuste");
   const elTotalLbl = box.querySelector("#pg-total-lbl");
   const cliente = PDV.venda.cliente;
@@ -62,22 +62,7 @@ async function pdvAplicarTabelaPreco(codForma, formas, box) {
     });
   };
 
-  if (!cliente || !cliente.id) { reverter(); if (elAjuste) elAjuste.innerHTML = ""; atualizaTotalPg(elTotalLbl); return; }
-
-  // id da forma escolhida (codForma é o cod_sefaz; precisamos do id da forma)
-  const forma = (formas || []).find(f => f.cod === codForma);
-  // buscamos as formas com id para casar — recarrega com id
-  let formaId = forma?.id;
-  if (!formaId) {
-    const { data: fdata } = await sb.from("oct_formas_pagamento")
-      .select("id,cod_sefaz,nome").eq("empresa_id", PDV.empresaId).eq("cod_sefaz", codForma).limit(5);
-    // se houver mais de uma forma com mesmo cod_sefaz, tenta casar pelo nome exibido
-    if (fdata && fdata.length) {
-      const nomeSel = (formas.find(f => f.cod === codForma) || {}).nome;
-      formaId = (fdata.find(f => f.nome === nomeSel) || fdata[0]).id;
-    }
-  }
-  if (!formaId) { reverter(); if (elAjuste) elAjuste.innerHTML = ""; atualizaTotalPg(elTotalLbl); return; }
+  if (!cliente || !cliente.id || !formaId) { reverter(); if (elAjuste) elAjuste.innerHTML = ""; atualizaTotalPg(elTotalLbl); return; }
 
   // tabelas vinculadas a este cliente
   const { data: tabsCli } = await sb.from("oct_tabela_preco_clientes")
@@ -85,7 +70,7 @@ async function pdvAplicarTabelaPreco(codForma, formas, box) {
   const tabelaIds = (tabsCli || []).map(t => t.tabela_id);
   if (!tabelaIds.length) { reverter(); if (elAjuste) elAjuste.innerHTML = ""; atualizaTotalPg(elTotalLbl); return; }
 
-  // entre essas, qual está vinculada à forma escolhida
+  // entre essas, qual está vinculada à forma escolhida (pelo id da forma)
   const { data: tabsForma } = await sb.from("oct_tabela_preco_formas")
     .select("tabela_id").in("tabela_id", tabelaIds).eq("forma_id", formaId);
   const tabelaIdAplicavel = (tabsForma || [])[0]?.tabela_id;
@@ -173,30 +158,32 @@ async function telaPagamento() {
       </div>
     </div>`, { maxWidth: "440px" });
 
-  // estado local da forma escolhida (inicia na primeira disponivel)
-  let formaSel = formas[0]?.cod || "01";
+  // estado local: guarda o ID da forma escolhida (não o cod_sefaz, pois
+  // várias formas podem ter o mesmo cod). Inicia na primeira disponível.
+  let formaSelId = formas[0]?.id || null;
   const elFormas = box.querySelector("#pg-formas");
   const render = () => {
     elFormas.innerHTML = formas.map(f => `
-      <button onclick="window.__pgSel('${f.cod}')" style="padding:8px 12px;border-radius:6px;border:2px solid ${formaSel === f.cod ? '#f97316' : '#ddd'};background:${formaSel === f.cod ? '#fff7ed' : '#fff'};color:#111;cursor:pointer;font-size:0.85rem">${f.nome}</button>`).join("");
+      <button onclick="window.__pgSel('${f.id}')" style="padding:8px 12px;border-radius:6px;border:2px solid ${formaSelId === f.id ? '#f97316' : '#ddd'};background:${formaSelId === f.id ? '#fff7ed' : '#fff'};color:#111;cursor:pointer;font-size:0.85rem">${f.nome}</button>`).join("");
   };
-  // área que mostra o ajuste aplicado pela tabela de preço
-  const elAjuste = box.querySelector("#pg-ajuste");
-  window.__pgSel = async (cod) => {
-    formaSel = cod;
+  window.__pgSel = async (id) => {
+    formaSelId = id;
     render();
-    await pdvAplicarTabelaPreco(cod, formas, box);
+    await pdvAplicarTabelaPreco(id, formas, box);
   };
   render();
   // aplica já na forma inicial
-  pdvAplicarTabelaPreco(formaSel, formas, box);
+  if (formaSelId) pdvAplicarTabelaPreco(formaSelId, formas, box);
 
   box.querySelector("#pg-continuar").addEventListener("click", () => {
     let cpf = (box.querySelector("#pg-cpf").value || "").replace(/\D/g, "");
     // fallback: se nao digitou, usa o doc manual (F4) ou o documento do cliente selecionado
     if (!cpf) cpf = (PDV.venda.clienteManual?.cpf || PDV.venda.cliente?.documento || "").replace(/\D/g, "");
     const ambiente = box.querySelector("#pg-ambiente").value;
-    telaPreTransmissao({ tpag: formaSel, cpf, ambiente, total });
+    // converte o id da forma escolhida no cod_sefaz (tpag) para a NFC-e
+    const formaEsc = formas.find(f => f.id === formaSelId);
+    const tpag = formaEsc ? formaEsc.cod : "99";
+    telaPreTransmissao({ tpag, cpf, ambiente, total, formaNome: formaEsc?.nome });
   });
 }
 
@@ -213,7 +200,7 @@ function telaPreTransmissao(opts) {
       <td style="padding:6px 4px;text-align:right">${Number(it.total).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
     </tr>`;
   }).join("");
-  const formaNome = pdvFormaNome(opts.tpag);
+  const formaNome = opts.formaNome || pdvFormaNome(opts.tpag);
 
   const box = abrirModal(`
     <div style="padding:22px">
