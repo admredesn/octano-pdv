@@ -17,25 +17,40 @@ function renderLogin() {
       <div style="background:#13151f;border:1px solid #2a2d3e;border-radius:12px;padding:32px;width:340px">
         <h1 style="color:#f97316;font-size:1.4rem;margin-bottom:4px">OCTANO PDV</h1>
         <p style="color:#888;font-size:0.82rem;margin-bottom:20px">Frente de caixa</p>
-        <input id="pdv-email" type="email" placeholder="E-mail" style="width:100%;padding:10px;margin-bottom:10px;border-radius:6px;border:1px solid #2a2d3e;background:#0b0d14;color:#fff">
-        <input id="pdv-senha" type="password" placeholder="Senha" style="width:100%;padding:10px;margin-bottom:16px;border-radius:6px;border:1px solid #2a2d3e;background:#0b0d14;color:#fff">
+        <input id="pdv-usuario" type="text" placeholder="Usuário" autocapitalize="off" autocomplete="username" style="width:100%;padding:10px;margin-bottom:10px;border-radius:6px;border:1px solid #2a2d3e;background:#0b0d14;color:#fff">
+        <input id="pdv-senha" type="password" placeholder="Senha" autocomplete="current-password" style="width:100%;padding:10px;margin-bottom:16px;border-radius:6px;border:1px solid #2a2d3e;background:#0b0d14;color:#fff">
         <button id="pdv-btn-login" style="width:100%;padding:11px;border-radius:6px;border:none;background:#f97316;color:#fff;font-weight:600;cursor:pointer">Entrar</button>
         <div id="pdv-login-msg" style="margin-top:12px;font-size:0.82rem;color:#f87171;text-align:center"></div>
       </div>
     </div>`;
   const btn = document.getElementById("pdv-btn-login");
   const tentar = async () => {
-    const email = document.getElementById("pdv-email").value.trim();
+    const usuario = document.getElementById("pdv-usuario").value.trim().toLowerCase();
     const senha = document.getElementById("pdv-senha").value;
     const msg = document.getElementById("pdv-login-msg");
+    if (!usuario || !senha) { msg.textContent = "Informe usuário e senha."; return; }
+    msg.style.color = "#888";
     msg.textContent = "Entrando...";
-    const { error } = await sb.auth.signInWithPassword({ email, password: senha });
-    if (error) { msg.textContent = "E-mail ou senha invalidos."; return; }
+
+    // 1) converte usuário -> e-mail via view de lookup (leitura pública restrita)
+    const { data: lk, error: errLk } = await sb.from("oct_login_lookup")
+      .select("email_login").eq("usuario", usuario).limit(1).maybeSingle();
+    if (errLk || !lk || !lk.email_login) {
+      msg.style.color = "#f87171";
+      msg.textContent = "Usuário ou senha inválidos.";
+      return;
+    }
+
+    // 2) autentica no Supabase com o e-mail vinculado (operador nunca o vê)
+    const { error } = await sb.auth.signInWithPassword({ email: lk.email_login, password: senha });
+    if (error) { msg.style.color = "#f87171"; msg.textContent = "Usuário ou senha inválidos."; return; }
+
     const { data: { session } } = await sb.auth.getSession();
     PDV.sessao = session;
     await carregarEmpresaEContexto();
   };
   btn.addEventListener("click", tentar);
+  document.getElementById("pdv-usuario").addEventListener("keydown", e => { if (e.key === "Enter") document.getElementById("pdv-senha").focus(); });
   document.getElementById("pdv-senha").addEventListener("keydown", e => { if (e.key === "Enter") tentar(); });
 }
 
