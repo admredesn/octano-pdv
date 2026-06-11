@@ -18,12 +18,12 @@ async function pdvCarregarFormasPag() {
   if (_formasPag) return _formasPag;
   try {
     const { data, error } = await sb.from("oct_formas_pagamento")
-      .select("nome,cod_sefaz,a_prazo,ordem,ativo")
+      .select("id,nome,cod_sefaz,a_prazo,ordem,ativo")
       .eq("empresa_id", PDV.empresaId).eq("ativo", true)
       .order("ordem", { ascending: true });
     if (error) throw error;
     if (data && data.length) {
-      _formasPag = data.map(f => ({ cod: f.cod_sefaz, nome: f.nome, a_prazo: f.a_prazo }));
+      _formasPag = data.map(f => ({ id: f.id, cod: f.cod_sefaz, nome: f.nome, a_prazo: f.a_prazo }));
     } else {
       _formasPag = FORMAS_PAG_FALLBACK;
     }
@@ -39,6 +39,105 @@ function pdvFormaNome(cod) {
   return (lista.find(f => f.cod === cod) || {}).nome || cod;
 }
 
+// Aplica a tabela de preço quando há cliente vinculado E a forma escolhida
+// está entre as formas da tabela. Ajusta o preço/litro (volume intacto).
+// Guarda o preço original em it._unitOriginal para poder reverter.
+async function pdvAplicarTabelaPreco(codForma, formas, box) {
+  const elAjuste = box.querySelector("#pg-ajuste");
+  const elTotalLbl = box.querySelector("#pg-total-lbl");
+  const cliente = PDV.venda.cliente;
+
+  // garante o preço original guardado em cada item
+  PDV.venda.itens.forEach(it => { if (it._unitOriginal == null) it._unitOriginal = Number(it.unit || 0); });
+
+  // função para reverter ao preço original
+  const reverter = () => {
+    PDV.venda.itens.forEach(it => {
+      it.unit = it._unitOriginal;
+      it.total = Number(it.qtd || 0) * Number(it.unit || 0);
+    });
+  };
+
+  if (!cliente || !cliente.id) { reverter(); if (elAjuste) elAjuste.innerHTML = ""; atualizaTotalPg(elTotalLbl); return; }
+
+  // id da forma escolhida (codForma é o cod_sefaz; precisamos do id da forma)
+  const forma = (formas || []).find(f => f.cod === codForma);
+  // buscamos as formas com id para casar — recarrega com id
+  let formaId = forma?.id;
+  if (!formaId) {
+    const { data: fdata } = await sb.from("oct_formas_pagamento")
+      .select("id,cod_sefaz,nome").eq("empresa_id", PDV.empresaId).eq("cod_sefaz", codForma).limit(5);
+    // se houver mais de uma forma com mesmo cod_sefaz, tenta casar pelo nome exibido
+    if (fdata && fdata.length) {
+      const nomeSel = (formas.find(f => f.cod === codForma) || {}).nome;
+      formaId = (fdata.find(f => f.nome === nomeSel) || fdata[0]).id;
+    }
+  }
+  if (!formaId) { reverter(); if (elAjuste) elAjuste.innerHTML = ""; atualizaTotalPg(elTotalLbl); return; }
+
+  // tabelas vinculadas a este cliente
+  const { data: tabsCli } = await sb.from("oct_tabela_preco_clientes")
+    .select("tabela_id").eq("cliente_id", cliente.id);
+  const tabelaIds = (tabsCli || []).map(t => t.tabela_id);
+  if (!tabelaIds.length) { reverter(); if (elAjuste) elAjuste.innerHTML = ""; atualizaTotalPg(elTotalLbl); return; }
+
+  // entre essas, qual está vinculada à forma escolhida
+  const { data: tabsForma } = await sb.from("oct_tabela_preco_formas")
+    .select("tabela_id").in("tabela_id", tabelaIds).eq("forma_id", formaId);
+  const tabelaIdAplicavel = (tabsForma || [])[0]?.tabela_id;
+  if (!tabelaIdAplicavel) { reverter(); if (elAjuste) elAjuste.innerHTML = ""; atualizaTotalPg(elTotalLbl); return; }
+
+  // carrega a condição e suas exceções por produto
+  const [{ data: tabela }, { data: excecoes }] = await Promise.all([
+    sb.from("oct_tabelas_preco").select("*").eq("id", tabelaIdAplicavel).single(),
+    sb.from("oct_tabela_preco_itens").select("*").eq("tabela_id", tabelaIdAplicavel),
+  ]);
+  if (!tabela || tabela.ativo === false) { reverter(); if (elAjuste) elAjuste.innerHTML = ""; atualizaTotalPg(elTotalLbl); return; }
+  const excPorProduto = {};
+  (excecoes || []).forEach(e => { excPorProduto[e.produto_id] = e; });
+
+  // aplica o ajuste em cada item (sobre o preço original), mantendo o volume
+  PDV.venda.itens.forEach(it => {
+    const base = Number(it._unitOriginal || 0);
+    const exc = it.produto_id ? excPorProduto[it.produto_id] : null;
+    let novoUnit;
+    if (exc) {
+      if (exc.preco_fixo != null) novoUnit = Number(exc.preco_fixo);
+      else novoUnit = pdvCalcAjuste(base, exc.tipo_ajuste, exc.modo_ajuste, Number(exc.valor_ajuste || 0));
+    } else {
+      novoUnit = pdvCalcAjuste(base, tabela.tipo_ajuste, tabela.modo_ajuste, Number(tabela.valor_ajuste || 0));
+    }
+    it.unit = novoUnit;
+    it.total = Number(it.qtd || 0) * novoUnit;
+  });
+
+  // feedback visual
+  const totalOrig = PDV.venda.itens.reduce((s, it) => s + Number(it.qtd || 0) * Number(it._unitOriginal || 0), 0);
+  const totalNovo = PDV.venda.itens.reduce((s, it) => s + Number(it.total || 0), 0);
+  const dif = totalNovo - totalOrig;
+  const cor = tabela.tipo_ajuste === "desconto" ? "#16a34a" : "#d97706";
+  const sinal = dif >= 0 ? "+" : "−";
+  if (elAjuste) {
+    elAjuste.innerHTML = `<div style="background:${tabela.tipo_ajuste === 'desconto' ? '#ecfdf5' : '#fffbeb'};border:1px solid ${cor};border-radius:8px;padding:10px;margin-bottom:14px;font-size:0.82rem;color:#111">
+      <strong style="color:${cor}">Tabela "${tabela.nome}"</strong> aplicada para ${cliente.nome}.<br>
+      ${tabela.tipo_ajuste === 'desconto' ? 'Desconto' : 'Acréscimo'} de ${tabela.modo_ajuste === 'percentual' ? Number(tabela.valor_ajuste) + '%' : 'R$ ' + Number(tabela.valor_ajuste).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+      — preço/litro ajustado (volume mantido).
+      <span style="color:${cor}">${sinal} R$ ${Math.abs(dif).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+    </div>`;
+  }
+  atualizaTotalPg(elTotalLbl);
+}
+
+function pdvCalcAjuste(base, tipo, modo, valor) {
+  if (tipo === "nenhum" || !valor) return base;
+  const ajuste = modo === "percentual" ? base * (valor / 100) : valor;
+  return tipo === "desconto" ? Math.max(0, base - ajuste) : base + ajuste;
+}
+
+function atualizaTotalPg(elTotalLbl) {
+  if (elTotalLbl) elTotalLbl.textContent = "R$ " + PDV.totalVenda().toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+}
+
 // chamado pelo botao "Fechar Venda" (F1)
 async function telaPagamento() {
   if (!PDV.venda.itens.length) { pdvToast("Adicione itens antes de fechar a venda.", "alerta"); return; }
@@ -47,7 +146,9 @@ async function telaPagamento() {
   const box = abrirModal(`
     <div style="padding:22px">
       <h2 style="color:#f97316;margin-bottom:4px">Pagamento</h2>
-      <p style="color:#888;font-size:0.85rem;margin-bottom:16px">Total da venda: <strong style="color:#16a34a;font-size:1.1rem">R$ ${total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong></p>
+      <p style="color:#888;font-size:0.85rem;margin-bottom:16px">Total da venda: <strong id="pg-total-lbl" style="color:#16a34a;font-size:1.1rem">R$ ${total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong></p>
+
+      <div id="pg-ajuste"></div>
 
       <label style="color:#555;font-size:0.8rem">Forma de pagamento</label>
       <div id="pg-formas" style="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 16px"></div>
@@ -75,8 +176,16 @@ async function telaPagamento() {
     elFormas.innerHTML = formas.map(f => `
       <button onclick="window.__pgSel('${f.cod}')" style="padding:8px 12px;border-radius:6px;border:2px solid ${formaSel === f.cod ? '#f97316' : '#ddd'};background:${formaSel === f.cod ? '#fff7ed' : '#fff'};color:#111;cursor:pointer;font-size:0.85rem">${f.nome}</button>`).join("");
   };
-  window.__pgSel = (cod) => { formaSel = cod; render(); };
+  // área que mostra o ajuste aplicado pela tabela de preço
+  const elAjuste = box.querySelector("#pg-ajuste");
+  window.__pgSel = async (cod) => {
+    formaSel = cod;
+    render();
+    await pdvAplicarTabelaPreco(cod, formas, box);
+  };
   render();
+  // aplica já na forma inicial
+  pdvAplicarTabelaPreco(formaSel, formas, box);
 
   box.querySelector("#pg-continuar").addEventListener("click", () => {
     let cpf = (box.querySelector("#pg-cpf").value || "").replace(/\D/g, "");
