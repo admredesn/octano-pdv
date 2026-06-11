@@ -233,6 +233,18 @@ function telaPreTransmissao(opts) {
     msg.style.color = "#888"; msg.textContent = "📡 Transmitindo à SEFAZ...";
     const r = await pdvEmitirNfce({ cpf: opts.cpf, tpag: opts.tpag, ambiente: opts.ambiente, pagamentos: [{ forma: opts.tpag, valor: opts.total }] });
     if (r.ok) {
+      // se a forma for "a prazo", exige captura da foto da nota física (obrigatória)
+      const ehPrazo = (opts.formaNome || "").toLowerCase().includes("prazo");
+      if (ehPrazo) {
+        msg.style.color = "#888"; msg.textContent = "Capture a foto da nota a prazo para concluir...";
+        const cliente = PDV.venda.cliente;
+        await capturarNotaPrazo({
+          cliente_id: cliente?.id || null,
+          cliente_nome: cliente?.nome || null,
+          chave_nfe: r.chave, numero_nfe: r.numero, valor: opts.total,
+          forma_nome: opts.formaNome,
+        });
+      }
       fecharModal();
       pdvToast("✓ NFC-e autorizada! Protocolo " + r.protocolo, "sucesso");
       PDV.limparVenda();
@@ -286,4 +298,114 @@ async function pdvImprimirCupom() {
   } catch (e) {
     pdvToast("Erro ao gerar cupom: " + e.message, "erro");
   }
+}
+
+// ============================================================
+// CAPTURA DA NOTA A PRAZO (foto obrigatória após transmitir)
+// ============================================================
+// Retorna uma Promise que só resolve quando a foto for capturada e
+// gravada. O modal não pode ser fechado sem concluir (trava a tela).
+function capturarNotaPrazo(dados) {
+  return new Promise((resolve) => {
+    const box = abrirModal(`
+      <div style="padding:22px">
+        <h2 style="color:#f97316;margin-bottom:2px">Foto da Nota a Prazo</h2>
+        <p style="color:#888;font-size:0.8rem;margin-bottom:14px">Capture a nota física assinada pelo cliente${dados.cliente_nome ? ' (' + dados.cliente_nome + ')' : ''}. Obrigatório para concluir.</p>
+
+        <div style="margin:6px 0 14px;background:#0b0d14;border-radius:8px;overflow:hidden;position:relative;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center">
+          <video id="np-video" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;display:none"></video>
+          <canvas id="np-canvas" style="width:100%;height:100%;object-fit:cover;display:none"></canvas>
+          <div id="np-cam-msg" style="color:#888;font-size:0.82rem;padding:20px;text-align:center">Iniciando câmera...</div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+          <button id="np-capturar" style="flex:1;padding:10px;border-radius:6px;border:1px solid #2563eb;background:#2563eb;color:#fff;cursor:pointer;font-weight:600" disabled>📷 Capturar</button>
+          <button id="np-tentar" style="flex:1;padding:10px;border-radius:6px;border:1px solid #d97706;background:#fff;color:#d97706;cursor:pointer;font-weight:600;display:none">↻ Tentar câmera novamente</button>
+          <button id="np-refazer" style="flex:1;padding:10px;border-radius:6px;border:1px solid #ddd;background:#fff;color:#555;cursor:pointer;font-weight:600;display:none">↻ Refazer</button>
+        </div>
+
+        <button id="np-salvar" style="width:100%;padding:11px;border-radius:6px;border:none;background:#f97316;color:#fff;font-weight:600;cursor:pointer" disabled>Salvar e concluir</button>
+        <div id="np-msg" style="margin-top:10px;font-size:0.82rem;text-align:center"></div>
+      </div>`, { maxWidth: "440px", fecharAoClicarFora: false });
+
+    const video = box.querySelector("#np-video");
+    const canvas = box.querySelector("#np-canvas");
+    const camMsg = box.querySelector("#np-cam-msg");
+    const btnCap = box.querySelector("#np-capturar");
+    const btnTentar = box.querySelector("#np-tentar");
+    const btnRefazer = box.querySelector("#np-refazer");
+    const btnSalvar = box.querySelector("#np-salvar");
+    const msg = box.querySelector("#np-msg");
+
+    let stream = null, fotoBlob = null;
+
+    async function iniciarCamera() {
+      btnTentar.style.display = "none";
+      camMsg.style.display = "block"; camMsg.style.color = "#888"; camMsg.textContent = "Iniciando câmera...";
+      const tentativas = [
+        { video: { width: { ideal: 320 }, height: { ideal: 240 } }, audio: false },
+        { video: { width: { ideal: 480 }, height: { ideal: 360 } }, audio: false },
+        { video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: false },
+        { video: true, audio: false },
+      ];
+      const comTimeout = (c, ms) => Promise.race([
+        navigator.mediaDevices.getUserMedia(c),
+        new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error("timeout"), { name: "AbortError" })), ms)),
+      ]);
+      for (const c of tentativas) {
+        try {
+          stream = await comTimeout(c, 4000);
+          video.srcObject = stream; video.style.display = "block";
+          camMsg.style.display = "none"; btnCap.disabled = false; btnCap.style.display = "block";
+          return;
+        } catch (e) { if (e.name === "NotAllowedError" || e.name === "SecurityError") break; }
+      }
+      camMsg.style.display = "block"; camMsg.style.color = "#dc2626";
+      camMsg.textContent = "Não foi possível acessar a câmera. Feche outros programas que a usem e tente novamente.";
+      btnCap.disabled = true; btnCap.style.display = "none"; btnTentar.style.display = "block";
+    }
+    function pararCamera() { if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; } }
+
+    btnTentar.addEventListener("click", () => iniciarCamera());
+    btnCap.addEventListener("click", () => {
+      const w = video.videoWidth || 640, h = video.videoHeight || 480;
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(video, 0, 0, w, h);
+      canvas.toBlob((blob) => {
+        fotoBlob = blob;
+        video.style.display = "none"; canvas.style.display = "block";
+        btnCap.style.display = "none"; btnRefazer.style.display = "block";
+        btnSalvar.disabled = false; pararCamera();
+      }, "image/jpeg", 0.85);
+    });
+    btnRefazer.addEventListener("click", async () => {
+      fotoBlob = null; canvas.style.display = "none"; btnRefazer.style.display = "none";
+      btnSalvar.disabled = true; await iniciarCamera();
+    });
+
+    btnSalvar.addEventListener("click", async () => {
+      if (!fotoBlob) { msg.style.color = "#dc2626"; msg.textContent = "Capture a foto antes."; return; }
+      btnSalvar.disabled = true; msg.style.color = "#888"; msg.textContent = "Enviando foto...";
+      const agora = new Date();
+      const stamp = agora.toISOString().replace(/[:.]/g, "-");
+      const path = `${PDV.empresaId}/${dados.cliente_id || "sem-cliente"}/${stamp}.jpg`;
+      const up = await sb.storage.from("notas_prazo").upload(path, fotoBlob, { contentType: "image/jpeg", upsert: false });
+      if (up.error) { btnSalvar.disabled = false; msg.style.color = "#dc2626"; msg.textContent = "Erro ao enviar: " + up.error.message; return; }
+      const pub = sb.storage.from("notas_prazo").getPublicUrl(path);
+      const fotoUrl = pub?.data?.publicUrl || null;
+      const { error } = await sb.from("oct_pdv_notas_prazo").insert({
+        empresa_id: PDV.empresaId, cliente_id: dados.cliente_id, cliente_nome: dados.cliente_nome,
+        chave_nfe: dados.chave_nfe, numero_nfe: dados.numero_nfe, valor: dados.valor,
+        forma_nome: dados.forma_nome, foto_url: fotoUrl, foto_path: path,
+        turno_id: PDV.turno?.id || null, registrado_em: agora.toISOString(),
+      });
+      if (error) { btnSalvar.disabled = false; msg.style.color = "#dc2626"; msg.textContent = "Erro: " + error.message; return; }
+      pararCamera();
+      fecharModal();
+      pdvToast("Foto da nota a prazo salva.", "sucesso");
+      resolve(true);
+    });
+
+    iniciarCamera();
+  });
 }
