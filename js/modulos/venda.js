@@ -96,15 +96,15 @@ async function vendaCarregarPendentes() {
   if (!PDV.empresaId) return;
   const { data, error } = await sb
     .from("oct_pdv_abastecimentos")
-    .select("id,bico,combustivel,produto_nome,litros,preco_litro,valor,valor_total,vendedor,data_mov,data_abast,tanque_id,tanque,venc_ini,venc_fin,tipo")
+    .select("id,bico,combustivel,produto_nome,litros,preco_litro,valor,valor_total,vendedor,data_mov,data_abast,tanque_id,tanque,venc_ini,venc_fin,tipo,status")
     .eq("empresa_id", PDV.empresaId)
-    .eq("status", "pendente")
+    .in("status", ["pendente", "afericao_pendente"])
     .order("data_mov", { ascending: true });
   if (error) { pdvToast("Erro ao carregar abastecimentos: " + error.message, "erro"); return; }
-  // considera apenas abastecimentos (nao afericao)
+  // mostra abastecimentos normais + os marcados como aferição (bloqueados aguardando autorização)
   _abastPendentes = (data || []).filter(a => (a.tipo || "abastecimento") === "abastecimento");
-  // limpa marcados que nao existem mais
-  const ids = new Set(_abastPendentes.map(a => a.id));
+  // limpa marcados que nao existem mais ou que ja estao bloqueados
+  const ids = new Set(_abastPendentes.filter(a => a.status === "pendente").map(a => a.id));
   _marcados = new Set([..._marcados].filter(id => ids.has(id)));
   vendaRenderAbast();
 }
@@ -128,6 +128,21 @@ function vendaRenderAbast() {
       const d = dt ? new Date(dt) : null;
       const dataStr = d ? d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : "—";
       const hrStr = d ? d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "";
+      const bloqueado = a.status === "afericao_pendente";
+      if (bloqueado) {
+        // linha bloqueada: aferição aguardando autorização do retaguarda
+        return `<tr style="border-bottom:1px solid #1a1d2e;background:#1a2436;opacity:0.85">
+          <td style="padding:6px 8px;text-align:center">🔒</td>
+          <td style="padding:6px 8px;color:#9aa">${a.bico ?? "—"}</td>
+          <td style="padding:6px 8px;color:#7dd3fc">${_abComb(a)}</td>
+          <td style="padding:6px 8px;color:#9aa">${dataStr} ${hrStr}</td>
+          <td style="padding:6px 8px;text-align:right;color:#9aa">${Number(a.litros || 0).toLocaleString("pt-BR", { minimumFractionDigits: 3 })}</td>
+          <td style="padding:6px 8px;text-align:right;color:#9aa">—</td>
+          <td style="padding:6px 8px;text-align:right;color:#60a5fa;font-weight:600">🧪 AFERIÇÃO</td>
+          <td style="padding:6px 8px;color:#9aa">${a.vendedor || "—"}</td>
+          <td style="padding:6px 8px;text-align:center;color:#fbbf24;font-size:0.7rem;white-space:nowrap">aguardando<br>autorização</td>
+        </tr>`;
+      }
       const marcado = _marcados.has(a.id);
       return `<tr style="border-bottom:1px solid #1a1d2e;background:${marcado ? '#1e2a1e' : 'transparent'};cursor:pointer"
                  onclick="vendaToggle('${a.id}')">
@@ -141,11 +156,9 @@ function vendaRenderAbast() {
         <td style="padding:6px 8px;text-align:right;color:#9aa">${Number(a.preco_litro || 0).toLocaleString("pt-BR", { minimumFractionDigits: 3 })}</td>
         <td style="padding:6px 8px;text-align:right;color:#4ade80;font-weight:600">${_abValor(a).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
         <td style="padding:6px 8px;color:#9aa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px">${a.vendedor || "—"}</td>
-        <td style="padding:6px 8px;text-align:center;white-space:nowrap">
+        <td style="padding:6px 8px;text-align:center">
           <button onclick="event.stopPropagation();vendaReceberUm('${a.id}')" title="Receber só este"
             style="padding:3px 8px;border-radius:5px;border:none;background:#16a34a;color:#fff;cursor:pointer;font-size:0.74rem">▸</button>
-          <button onclick="event.stopPropagation();vendaAferir('${a.id}')" title="Marcar como aferição (volta ao tanque)"
-            style="padding:3px 8px;border-radius:5px;border:none;background:#2563eb;color:#fff;cursor:pointer;font-size:0.74rem;margin-left:4px">🧪</button>
         </td>
       </tr>`;
     }).join("");
@@ -169,27 +182,31 @@ function vendaAtualizarTotais() {
   set("v-mrk-valor", mValor.toLocaleString("pt-BR", { minimumFractionDigits: 2 }));
 }
 
+// chamada pelo botão "Aferição" do Menu Operador: marca os abastecimentos
+// SELECIONADOS como aferição pendente. Eles ficam bloqueados na tela (não dá
+// para transmitir nem cancelar) até o retaguarda autorizar.
+async function afericaoAbrir() {
+  if (!PDV.turno) { pdvToast("Abra um turno antes.", "alerta"); return; }
+  const ids = [..._marcados];
+  if (!ids.length) { pdvToast("Selecione os abastecimentos que deseja aferir.", "alerta"); return; }
+  const sel = _abastPendentes.filter(a => _marcados.has(a.id));
+  const totLitros = sel.reduce((s, a) => s + Number(a.litros || 0), 0);
+  if (!confirm(`Marcar ${ids.length} abastecimento(s) (${totLitros.toLocaleString("pt-BR", { minimumFractionDigits: 3 })} L) como AFERIÇÃO?\n\nEles ficarão bloqueados aguardando autorização no retaguarda e não poderão ser transmitidos nem cancelados.`)) return;
+
+  const { error } = await sb.from("oct_pdv_abastecimentos")
+    .update({ status: "afericao_pendente" })
+    .in("id", ids);
+  if (error) { pdvToast("Erro: " + error.message, "erro"); return; }
+
+  _marcados.clear();
+  await vendaCarregarPendentes();
+  pdvToast(`${ids.length} aferição(ões) registrada(s). Aguardando autorização no retaguarda.`, "sucesso");
+}
+
 // ---- marcacao ----
 function vendaToggle(id) {
   if (_marcados.has(id)) _marcados.delete(id); else _marcados.add(id);
   vendaRenderAbast();
-}
-
-// marca um abastecimento pendente como AFERICAO: o combustivel volta ao tanque,
-// nao vira venda e nao mexe no estoque. O registro some da lista de pendentes.
-async function vendaAferir(id) {
-  const a = _abastPendentes.find(x => x.id === id);
-  if (!a) return;
-  if (!confirm(`Marcar este abastecimento (bico ${a.bico ?? "—"}, ${Number(a.litros || 0).toLocaleString("pt-BR", { minimumFractionDigits: 3 })} L) como AFERIÇÃO? O combustível retorna ao tanque e não será cobrado.`)) return;
-  const { error } = await sb.from("oct_pdv_abastecimentos")
-    .update({ tipo: "afericao", status: "concluido", preco_litro: 0, valor: 0,
-              observacao: "Aferição - combustível retornado ao tanque" })
-    .eq("id", id);
-  if (error) { pdvToast("Erro ao registrar aferição: " + error.message, "erro"); return; }
-  _marcados.delete(id);
-  _abastPendentes = _abastPendentes.filter(x => x.id !== id);
-  vendaRenderAbast();
-  pdvToast(`Aferição registrada (bico ${a.bico ?? "—"}). Combustível retornado ao tanque.`, "sucesso");
 }
 function vendaMarcarTodos() {
   _abastPendentes.forEach(a => _marcados.add(a.id));
