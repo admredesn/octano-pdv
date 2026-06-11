@@ -11,6 +11,7 @@
 
 let _abastPendentes = [];   // [{id, bico, combustivel, litros, preco_litro, valor, vendedor, data_mov, tanque_id}]
 let _marcados = new Set();  // ids marcados
+let _foco = -1;             // índice da linha em foco (navegação por teclado)
 let _abastCanal = null;     // canal realtime
 let _tanquesIdx = {};       // { tanque_id: numero } para resolver nTanque do encerrante
 
@@ -89,7 +90,67 @@ registrarTela("venda", function (root) {
   vendaCarregarTanques();
   vendaCarregarPendentes();
   vendaAtivarRealtime();
+  vendaAtivarTeclado();
 });
+
+// navegação por teclado na lista de abastecimentos:
+// ↑/↓ movem o foco, Espaço marca/desmarca o item em foco.
+let _tecladoAtivo = false;
+function vendaAtivarTeclado() {
+  if (_tecladoAtivo) return;   // registra só uma vez
+  _tecladoAtivo = true;
+  document.addEventListener("keydown", (e) => {
+    if (telaAtual() !== "venda") return;
+    // ignora se o usuário está digitando num campo
+    const tag = (document.activeElement?.tagName || "").toLowerCase();
+    if (tag === "input" || tag === "select" || tag === "textarea") return;
+    // só linhas selecionáveis (pendentes, não bloqueadas)
+    const selecionaveis = _abastPendentes.filter(a => a.status !== "afericao_pendente");
+    if (!selecionaveis.length) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      _foco = vendaProxFoco(1);
+      vendaRenderAbast();
+      vendaScrollFoco();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      _foco = vendaProxFoco(-1);
+      vendaRenderAbast();
+      vendaScrollFoco();
+    } else if (e.key === " " || e.code === "Space") {
+      // marca/desmarca o item em foco
+      if (_foco >= 0 && _foco < _abastPendentes.length) {
+        const a = _abastPendentes[_foco];
+        if (a && a.status !== "afericao_pendente") {
+          e.preventDefault();
+          vendaToggle(a.id);
+        }
+      }
+    }
+  });
+}
+
+// acha o próximo índice de foco numa direção, pulando linhas bloqueadas
+function vendaProxFoco(dir) {
+  const n = _abastPendentes.length;
+  if (!n) return -1;
+  let i = _foco;
+  for (let passos = 0; passos < n; passos++) {
+    i = (i + dir + n) % n;
+    if (i < 0) i = n - 1;
+    if (_abastPendentes[i] && _abastPendentes[i].status !== "afericao_pendente") return i;
+  }
+  return _foco;
+}
+
+// rola a lista para manter a linha em foco visível
+function vendaScrollFoco() {
+  const tb = document.getElementById("v-abast");
+  if (!tb) return;
+  const tr = tb.querySelector(`tr[data-idx="${_foco}"]`);
+  if (tr) tr.scrollIntoView({ block: "nearest" });
+}
 
 // ---- carga dos pendentes ----
 async function vendaCarregarPendentes() {
@@ -106,6 +167,8 @@ async function vendaCarregarPendentes() {
   // limpa marcados que nao existem mais ou que ja estao bloqueados
   const ids = new Set(_abastPendentes.filter(a => a.status === "pendente").map(a => a.id));
   _marcados = new Set([..._marcados].filter(id => ids.has(id)));
+  // mantém o foco dentro dos limites
+  if (_foco >= _abastPendentes.length) _foco = _abastPendentes.length - 1;
   vendaRenderAbast();
 }
 
@@ -123,15 +186,16 @@ function vendaRenderAbast() {
     if (vazio) vazio.style.display = "block";
   } else {
     if (vazio) vazio.style.display = "none";
-    tb.innerHTML = _abastPendentes.map(a => {
+    tb.innerHTML = _abastPendentes.map((a, idx) => {
       const dt = _abData(a);
       const d = dt ? new Date(dt) : null;
       const dataStr = d ? d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : "—";
       const hrStr = d ? d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "";
+      const emFoco = idx === _foco;
       const bloqueado = a.status === "afericao_pendente";
       if (bloqueado) {
         // linha bloqueada: aferição aguardando autorização do retaguarda
-        return `<tr style="border-bottom:1px solid #1a1d2e;background:#1a2436;opacity:0.85">
+        return `<tr data-idx="${idx}" style="border-bottom:1px solid #1a1d2e;background:#1a2436;opacity:0.85${emFoco ? ';outline:2px solid #f97316;outline-offset:-2px' : ''}">
           <td style="padding:6px 8px;text-align:center">🔒</td>
           <td style="padding:6px 8px;color:#9aa">${a.bico ?? "—"}</td>
           <td style="padding:6px 8px;color:#7dd3fc">${_abComb(a)}</td>
@@ -144,7 +208,8 @@ function vendaRenderAbast() {
         </tr>`;
       }
       const marcado = _marcados.has(a.id);
-      return `<tr style="border-bottom:1px solid #1a1d2e;background:${marcado ? '#1e2a1e' : 'transparent'};cursor:pointer"
+      const bg = marcado ? '#1e2a1e' : 'transparent';
+      return `<tr data-idx="${idx}" style="border-bottom:1px solid #1a1d2e;background:${bg};cursor:pointer${emFoco ? ';outline:2px solid #f97316;outline-offset:-2px' : ''}"
                  onclick="vendaToggle('${a.id}')">
         <td style="padding:6px 8px;text-align:center">
           <input type="checkbox" ${marcado ? "checked" : ""} onclick="event.stopPropagation();vendaToggle('${a.id}')" style="cursor:pointer">
