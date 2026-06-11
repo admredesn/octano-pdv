@@ -2,17 +2,47 @@
 // octano-pdv  -  Modulo PAGAMENTO + PRE-TRANSMISSAO
 // ============================================================
 
-const FORMAS_PAG = [
+// fallback caso o banco nao tenha formas cadastradas
+const FORMAS_PAG_FALLBACK = [
   { cod: "01", nome: "Dinheiro" },
   { cod: "17", nome: "PIX" },
   { cod: "03", nome: "Cartão Crédito" },
   { cod: "04", nome: "Cartão Débito" },
   { cod: "99", nome: "Prazo / Outros" },
 ];
+// cache das formas vindas do retaguarda (oct_formas_pagamento)
+let _formasPag = null;
+
+// carrega as formas de pagamento configuradas no retaguarda (cacheado).
+async function pdvCarregarFormasPag() {
+  if (_formasPag) return _formasPag;
+  try {
+    const { data, error } = await sb.from("oct_formas_pagamento")
+      .select("nome,cod_sefaz,a_prazo,ordem,ativo")
+      .eq("empresa_id", PDV.empresaId).eq("ativo", true)
+      .order("ordem", { ascending: true });
+    if (error) throw error;
+    if (data && data.length) {
+      _formasPag = data.map(f => ({ cod: f.cod_sefaz, nome: f.nome, a_prazo: f.a_prazo }));
+    } else {
+      _formasPag = FORMAS_PAG_FALLBACK;
+    }
+  } catch (e) {
+    console.error("formas de pagamento: usando fallback", e);
+    _formasPag = FORMAS_PAG_FALLBACK;
+  }
+  return _formasPag;
+}
+// usada para resolver o nome a partir do codigo
+function pdvFormaNome(cod) {
+  const lista = _formasPag || FORMAS_PAG_FALLBACK;
+  return (lista.find(f => f.cod === cod) || {}).nome || cod;
+}
 
 // chamado pelo botao "Fechar Venda" (F1)
-function telaPagamento() {
+async function telaPagamento() {
   if (!PDV.venda.itens.length) { pdvToast("Adicione itens antes de fechar a venda.", "alerta"); return; }
+  const formas = await pdvCarregarFormasPag();
   const total = PDV.totalVenda();
   const box = abrirModal(`
     <div style="padding:22px">
@@ -38,11 +68,11 @@ function telaPagamento() {
       </div>
     </div>`, { maxWidth: "440px" });
 
-  // estado local da forma escolhida
-  let formaSel = "01";
+  // estado local da forma escolhida (inicia na primeira disponivel)
+  let formaSel = formas[0]?.cod || "01";
   const elFormas = box.querySelector("#pg-formas");
   const render = () => {
-    elFormas.innerHTML = FORMAS_PAG.map(f => `
+    elFormas.innerHTML = formas.map(f => `
       <button onclick="window.__pgSel('${f.cod}')" style="padding:8px 12px;border-radius:6px;border:2px solid ${formaSel === f.cod ? '#f97316' : '#ddd'};background:${formaSel === f.cod ? '#fff7ed' : '#fff'};color:#111;cursor:pointer;font-size:0.85rem">${f.nome}</button>`).join("");
   };
   window.__pgSel = (cod) => { formaSel = cod; render(); };
@@ -70,7 +100,7 @@ function telaPreTransmissao(opts) {
       <td style="padding:6px 4px;text-align:right">${Number(it.total).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
     </tr>`;
   }).join("");
-  const formaNome = (FORMAS_PAG.find(f => f.cod === opts.tpag) || {}).nome || opts.tpag;
+  const formaNome = pdvFormaNome(opts.tpag);
 
   const box = abrirModal(`
     <div style="padding:22px">
