@@ -47,14 +47,18 @@ async function pdvAplicarTabelaPreco(codForma, formas, box) {
   const elTotalLbl = box.querySelector("#pg-total-lbl");
   const cliente = PDV.venda.cliente;
 
-  // garante o preço original guardado em cada item
-  PDV.venda.itens.forEach(it => { if (it._unitOriginal == null) it._unitOriginal = Number(it.unit || 0); });
+  // garante o preço E o total originais guardados em cada item
+  PDV.venda.itens.forEach(it => {
+    if (it._unitOriginal == null) it._unitOriginal = Number(it.unit || 0);
+    if (it._totalOriginal == null) it._totalOriginal = Number(it.total || 0);
+  });
 
-  // função para reverter ao preço original
+  // função para reverter ao preço/total ORIGINAIS (sem recalcular — preserva
+  // o valor real cobrado na bomba, que pode diferir de litros×preço)
   const reverter = () => {
     PDV.venda.itens.forEach(it => {
       it.unit = it._unitOriginal;
-      it.total = Number(it.qtd || 0) * Number(it.unit || 0);
+      it.total = it._totalOriginal;
     });
   };
 
@@ -112,7 +116,7 @@ async function pdvAplicarTabelaPreco(codForma, formas, box) {
   });
 
   // feedback visual
-  const totalOrig = PDV.venda.itens.reduce((s, it) => s + Number(it.qtd || 0) * Number(it._unitOriginal || 0), 0);
+  const totalOrig = PDV.venda.itens.reduce((s, it) => s + Number(it._totalOriginal || 0), 0);
   const totalNovo = PDV.venda.itens.reduce((s, it) => s + Number(it.total || 0), 0);
   const dif = totalNovo - totalOrig;
   const cor = tabela.tipo_ajuste === "desconto" ? "#16a34a" : "#d97706";
