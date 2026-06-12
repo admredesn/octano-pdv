@@ -68,6 +68,8 @@ function montarBarraAcoes() {
 // atalhos de teclado (F1..F12)
 document.addEventListener("keydown", (e) => {
   if (!PDV.empresa) return; // so depois de logado
+  // trava: durante captura obrigatória, ignora todas as teclas (ESC, F1-F8, etc.)
+  if (PDV._capturaObrigatoria) { e.preventDefault(); e.stopPropagation(); return; }
   const map = {
     F1: "pdvFecharVenda", F2: "pdvAddItem", F3: "pdvSelecionarCliente", F4: "pdvDadosClienteManual",
     F5: "pdvCancelarItem", F6: "pdvCancelarCupom", F7: "abrirMenuOperador",
@@ -96,14 +98,11 @@ function _temModalAberto() {
 function pdvTratarEsc() {
   if (!PDV.empresa) return;
   if (_temModalAberto()) {
-    // 1o ESC fecha o modal; arma janela para o proximo ESC voltar pra casa
     fecharModal();
     _armarSegundoEsc();
     return;
   }
-  // sem modal: precisa de 2 ESCs dentro da janela de tempo
   if (_escTimer) {
-    // segundo ESC dentro da janela -> volta pra casa
     clearTimeout(_escTimer); _escTimer = null;
     pdvVoltarParaCasa();
   } else {
@@ -113,7 +112,7 @@ function pdvTratarEsc() {
 
 function _armarSegundoEsc() {
   if (_escTimer) clearTimeout(_escTimer);
-  _escTimer = setTimeout(() => { _escTimer = null; }, 1500); // 1,5s para o 2o ESC
+  _escTimer = setTimeout(() => { _escTimer = null; }, 1500);
 }
 
 function pdvVoltarParaCasa() {
@@ -122,50 +121,41 @@ function pdvVoltarParaCasa() {
   }
 }
 
-// ---- timeout de inatividade: volta pra casa apos 60s sem interacao ----
-// Poupa telas criticas: se ha um modal aberto (pagamento, cliente, etc.),
-// NAO dispara, para nao interromper uma operacao em andamento.
 function _resetarInatividade() {
   if (_inatividadeTimer) clearTimeout(_inatividadeTimer);
   _inatividadeTimer = setTimeout(() => {
     if (!PDV.empresa) return;
-    if (_temModalAberto()) { _resetarInatividade(); return; } // poupa operacao em andamento
+    if (_temModalAberto()) { _resetarInatividade(); return; }
     if (typeof telaAtual === "function" && telaAtual() !== PDV_TELA_PADRAO) {
       pdvVoltarParaCasa();
     }
-  }, 60000); // 60s
+  }, 60000);
 }
 
-// qualquer interacao do usuario reinicia o contador de inatividade
 ["mousedown", "keydown", "mousemove", "touchstart", "wheel"].forEach(ev => {
   document.addEventListener(ev, _resetarInatividade, { passive: true });
 });
-// inicia o contador quando o modulo carrega
 _resetarInatividade();
 
-// stubs (serao implementados nas proximas fases) - evitam erro ao clicar
 function pdvFecharVenda() { if (typeof telaPagamento === "function") telaPagamento(); else pdvToast("Pagamento: proxima fase", "info"); }
 function pdvCancelarItem() { if (typeof vendaCancelarItem === "function") vendaCancelarItem(); }
 function pdvAddItem() { if (typeof vendaAbrirBuscaProduto === "function") vendaAbrirBuscaProduto(); else pdvToast("Abra a tela de venda primeiro.", "info"); }
 
-// atualiza o indicador de cliente no cabecalho. Padrao: "Consumidor Final".
-// Mostra o cliente cadastrado (F3) ou os dados manuais (F4), se houver.
 function pdvAtualizarIndicadorCliente() {
   const el = document.getElementById("pdv-h-cliente-nome");
   if (!el) return;
   const v = PDV.venda || {};
   if (v.cliente && v.cliente.nome) {
     el.textContent = v.cliente.nome;
-    el.style.color = "#fbbf24";   // amarelo: cliente identificado
+    el.style.color = "#fbbf24";
   } else if (v.clienteManual && (v.clienteManual.nome || v.clienteManual.cpf)) {
     el.textContent = v.clienteManual.nome || ("CPF " + v.clienteManual.cpf);
     el.style.color = "#fbbf24";
   } else {
     el.textContent = "Consumidor Final";
-    el.style.color = "#4ade80";   // verde: padrao
+    el.style.color = "#4ade80";
   }
 }
 function pdvCancelarCupom() { pdvToast("Cancelar cupom: use Cupons Fiscais (F10)", "info"); }
 
-// inicializa quando a pagina carrega
 window.addEventListener("DOMContentLoaded", pdvInit);
