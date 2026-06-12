@@ -40,7 +40,5 @@ function abrirMenuOperador() {
 
 // fecha o menu com Esc
 document.addEventListener("keydown", (e) => {
-  // durante captura obrigatória (foto da nota a prazo), o ESC não fecha nada
-  if (typeof PDV !== "undefined" && PDV._capturaObrigatoria) return;
   if (e.key === "Escape" && document.getElementById("pdv-modal-overlay")) fecharModal();
 });
