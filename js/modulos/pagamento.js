@@ -308,16 +308,6 @@ async function pdvImprimirCupom() {
 function capturarNotaPrazo(dados) {
   return new Promise((resolve) => {
     PDV._capturaObrigatoria = true;   // trava ESC, teclas e fechamento do modal
-    // bloqueador de ESC em FASE DE CAPTURA: roda antes de qualquer outro handler
-    // (inclusive o do menu_operador), impedindo que fechem a tela de captura.
-    const _bloqueiaEsc = (e) => {
-      if (PDV._capturaObrigatoria && (e.key === "Escape" || e.key === "Esc")) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        e.stopPropagation();
-      }
-    };
-    document.addEventListener("keydown", _bloqueiaEsc, true);  // capture phase
     const box = abrirModal(`
       <div style="padding:22px">
         <h2 style="color:#f97316;margin-bottom:2px">Foto da Nota a Prazo</h2>
@@ -413,7 +403,6 @@ function capturarNotaPrazo(dados) {
       if (error) { btnSalvar.disabled = false; msg.style.color = "#dc2626"; msg.textContent = "Erro: " + error.message; return; }
       pararCamera();
       PDV._capturaObrigatoria = false;   // libera a trava
-      document.removeEventListener("keydown", _bloqueiaEsc, true);
       fecharModalForcado();
       pdvToast("Foto da nota a prazo salva.", "sucesso");
       resolve(true);
