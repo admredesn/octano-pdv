@@ -105,7 +105,7 @@ async function pdvAplicarTabelaPreco(formaId, formas, box) {
   const totalNovo = PDV.venda.itens.reduce((s, it) => s + Number(it.total || 0), 0);
   const dif = totalNovo - totalOrig;
   const cor = tabela.tipo_ajuste === "desconto" ? "#16a34a" : "#d97706";
-  const sinal = dif >= 0 ? "+" : "√";
+  const sinal = dif >= 0 ? "+" : "−";
   if (elAjuste) {
     elAjuste.innerHTML = `<div style="background:${tabela.tipo_ajuste === 'desconto' ? '#ecfdf5' : '#fffbeb'};border:1px solid ${cor};border-radius:8px;padding:10px;margin-bottom:14px;font-size:0.82rem;color:#111">
       <strong style="color:${cor}">Tabela "${tabela.nome}"</strong> aplicada para ${cliente.nome}.<br>
@@ -308,6 +308,16 @@ async function pdvImprimirCupom() {
 function capturarNotaPrazo(dados) {
   return new Promise((resolve) => {
     PDV._capturaObrigatoria = true;   // trava ESC, teclas e fechamento do modal
+    // bloqueador de ESC em FASE DE CAPTURA: roda antes de qualquer outro handler
+    // (inclusive o do menu_operador), impedindo que fechem a tela de captura.
+    const _bloqueiaEsc = (e) => {
+      if (PDV._capturaObrigatoria && (e.key === "Escape" || e.key === "Esc")) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        e.stopPropagation();
+      }
+    };
+    document.addEventListener("keydown", _bloqueiaEsc, true);  // capture phase
     const box = abrirModal(`
       <div style="padding:22px">
         <h2 style="color:#f97316;margin-bottom:2px">Foto da Nota a Prazo</h2>
@@ -403,6 +413,7 @@ function capturarNotaPrazo(dados) {
       if (error) { btnSalvar.disabled = false; msg.style.color = "#dc2626"; msg.textContent = "Erro: " + error.message; return; }
       pararCamera();
       PDV._capturaObrigatoria = false;   // libera a trava
+      document.removeEventListener("keydown", _bloqueiaEsc, true);
       fecharModalForcado();
       pdvToast("Foto da nota a prazo salva.", "sucesso");
       resolve(true);
