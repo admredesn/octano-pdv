@@ -44,6 +44,13 @@ function abrirModal(htmlConteudo, opts) {
   return box;
 }
 function fecharModal() {
+  // trava: se houver captura obrigatória em andamento, não permite fechar
+  if (typeof PDV !== "undefined" && PDV._capturaObrigatoria) return;
+  const ov = document.getElementById("pdv-modal-overlay");
+  if (ov) ov.remove();
+}
+// fecha o modal ignorando a trava (uso interno, só após concluir a captura)
+function fecharModalForcado() {
   const ov = document.getElementById("pdv-modal-overlay");
   if (ov) ov.remove();
 }
