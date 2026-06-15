@@ -308,6 +308,16 @@ async function pdvImprimirCupom() {
 function capturarNotaPrazo(dados) {
   return new Promise((resolve) => {
     PDV._capturaObrigatoria = true;   // trava ESC, teclas e fechamento do modal
+    // bloqueador de ESC em FASE DE CAPTURA: roda antes de qualquer outro handler
+    // (inclusive o do menu_operador), impedindo que fechem a tela de captura.
+    const _bloqueiaEsc = (e) => {
+      if (PDV._capturaObrigatoria && (e.key === "Escape" || e.key === "Esc")) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        e.stopPropagation();
+      }
+    };
+    document.addEventListener("keydown", _bloqueiaEsc, true);  // capture phase
     const box = abrirModal(`
       <div style="padding:22px">
         <h2 style="color:#f97316;margin-bottom:2px">Foto da Nota a Prazo</h2>
@@ -343,10 +353,15 @@ function capturarNotaPrazo(dados) {
     async function iniciarCamera() {
       btnTentar.style.display = "none";
       camMsg.style.display = "block"; camMsg.style.color = "#888"; camMsg.textContent = "Iniciando câmera...";
+      // foco contínuo + câmera traseira (quando houver) ajudam muito na foto da nota.
+      // Tenta da maior resolução para a menor; cai para a próxima se a câmera recusar.
+      const focoTras = { focusMode: "continuous", facingMode: "environment" };
       const tentativas = [
-        { video: { width: { ideal: 320 }, height: { ideal: 240 } }, audio: false },
-        { video: { width: { ideal: 480 }, height: { ideal: 360 } }, audio: false },
+        { video: { ...focoTras, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false },
+        { video: { ...focoTras, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+        { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
         { video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: false },
+        { video: { width: { ideal: 320 }, height: { ideal: 240 } }, audio: false },
         { video: true, audio: false },
       ];
       const comTimeout = (c, ms) => Promise.race([
@@ -358,6 +373,14 @@ function capturarNotaPrazo(dados) {
           stream = await comTimeout(c, 4000);
           video.srcObject = stream; video.style.display = "block";
           camMsg.style.display = "none"; btnCap.disabled = false; btnCap.style.display = "block";
+          // tenta forçar foco contínuo via constraints aplicadas à track (quando suportado)
+          try {
+            const track = stream.getVideoTracks()[0];
+            const caps = track.getCapabilities ? track.getCapabilities() : {};
+            if (caps.focusMode && caps.focusMode.includes("continuous")) {
+              await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
+            }
+          } catch (e) { /* foco automático não suportado: segue sem travar */ }
           return;
         } catch (e) { if (e.name === "NotAllowedError" || e.name === "SecurityError") break; }
       }
@@ -377,7 +400,7 @@ function capturarNotaPrazo(dados) {
         video.style.display = "none"; canvas.style.display = "block";
         btnCap.style.display = "none"; btnRefazer.style.display = "block";
         btnSalvar.disabled = false; pararCamera();
-      }, "image/jpeg", 0.85);
+      }, "image/jpeg", 0.95);
     });
     btnRefazer.addEventListener("click", async () => {
       fotoBlob = null; canvas.style.display = "none"; btnRefazer.style.display = "none";
@@ -403,6 +426,7 @@ function capturarNotaPrazo(dados) {
       if (error) { btnSalvar.disabled = false; msg.style.color = "#dc2626"; msg.textContent = "Erro: " + error.message; return; }
       pararCamera();
       PDV._capturaObrigatoria = false;   // libera a trava
+      document.removeEventListener("keydown", _bloqueiaEsc, true);
       fecharModalForcado();
       pdvToast("Foto da nota a prazo salva.", "sucesso");
       resolve(true);
