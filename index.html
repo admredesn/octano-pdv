@@ -2,8 +2,18 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Octano PDV</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0b0d14">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Octano PDV">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
     body { background: #0b0d14; color: #e5e7eb; }
@@ -45,6 +55,15 @@
   <script src="js/modulos/gerente.js?v=1"></script>
 
   <!-- App (init por ultimo) -->
-  <script src="js/core/app.js?v=9"></script>
+  <script src="js/core/app.js?v=10"></script>
+
+  <!-- PWA: registra o service worker (instalar como app + offline basico) -->
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").catch((e) => console.warn("SW nao registrado:", e));
+      });
+    }
+  </script>
 </body>
 </html>
