@@ -21,7 +21,6 @@ function montarLayoutPrincipal() {
         <span>Operador: <strong id="pdv-h-operador">${PDV.operador?.nome || "—"}</strong></span>
         <span>Turno: <strong id="pdv-h-turno" style="color:${PDV.turno ? '#4ade80' : '#f87171'}">${PDV.turno ? "ABERTO #" + PDV.turno.numero : "FECHADO"}</strong></span>
         <span id="pdv-h-relogio"></span>
-        <button onclick="pdvMinimizarQuiosque()" title="Minimizar / sair do modo quiosque" style="background:#2a2d3e;color:#fff;border:none;padding:5px 12px;border-radius:5px;cursor:pointer">⤓ Minimizar</button>
         <button onclick="pdvLogout()" style="background:#2a2d3e;color:#fff;border:none;padding:5px 12px;border-radius:5px;cursor:pointer">Sair</button>
       </div>
     </div>
@@ -30,33 +29,6 @@ function montarLayoutPrincipal() {
   `;
   iniciarRelogio();
   montarBarraAcoes();
-}
-
-// Painel de controle do modo quiosque. No --kiosk o navegador NAO deixa a
-// pagina minimizar a propria janela por seguranca, entao mostramos os atalhos
-// do teclado de forma clara e controlada (evita o operador sair sem querer).
-function pdvMinimizarQuiosque() {
-  abrirModal(`
-    <div style="padding:22px;max-width:420px">
-      <h2 style="color:#f97316;margin-bottom:6px">Minimizar / Sair do Quiosque</h2>
-      <p style="color:#888;font-size:0.85rem;margin-bottom:16px">
-        O PDV está em modo quiosque (tela cheia travada). Use um dos atalhos abaixo:
-      </p>
-      <div style="display:flex;flex-direction:column;gap:10px;font-size:0.9rem;color:#111">
-        <div style="background:#f3f4f6;border-radius:8px;padding:12px">
-          <strong style="color:#2563eb">⤓ Minimizar</strong><br>
-          Pressione a <strong>tecla Windows</strong> (⊞) — leva à área de trabalho sem fechar o PDV.<br>
-          <span style="color:#888;font-size:0.8rem">Alternativa: <strong>⊞ + D</strong> mostra a área de trabalho.</span>
-        </div>
-        <div style="background:#fffbeb;border:1px solid #d97706;border-radius:8px;padding:12px">
-          <strong style="color:#d97706">⤬ Sair do quiosque</strong><br>
-          Pressione <strong>Alt + F4</strong> para fechar o PDV.<br>
-          <span style="color:#888;font-size:0.8rem">Para reabrir, use o atalho "Octano PDV" na área de trabalho.</span>
-        </div>
-      </div>
-      <button onclick="fecharModal()" style="width:100%;margin-top:18px;padding:11px;border-radius:6px;border:none;background:#f97316;color:#fff;font-weight:600;cursor:pointer">Voltar ao PDV</button>
-    </div>
-  `, { maxWidth: "440px" });
 }
 
 function iniciarRelogio() {
